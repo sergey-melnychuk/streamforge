@@ -32,10 +32,16 @@
 pub mod core;
 pub mod operators;
 pub mod execution;
+pub mod query;
+pub mod sinks;
+pub mod sources;
 pub mod state;
+pub mod storage;
 pub mod metrics;
 pub mod config;
 pub mod distributed;
+pub mod network;
+pub mod tracing;
 
 /// Re-exports of commonly used types and traits
 pub mod prelude {

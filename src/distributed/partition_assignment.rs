@@ -135,11 +135,48 @@ impl PartitionAssigner for ConsistentHashAssigner {
             return assignment;
         }
 
-        // Assign each partition to a node
+        // Assign each partition to nodes (with replication)
         for partition in 0..partitions {
             let hash = ring.hash_partition(partition);
-            if let Some(node_id) = ring.get_node(hash) {
-                assignment.get_mut(&node_id).unwrap().push(partition);
+            
+            // Get primary node (leader) - first node on the ring
+            if let Some(primary_node) = ring.get_node(hash) {
+                assignment.get_mut(&primary_node).unwrap().push(partition);
+
+                // Assign replicas (followers) - find next nodes on the ring
+                if self.replication_factor > 1 && nodes.len() > 1 {
+                    let mut replica_count = 1; // Already assigned primary
+                    let mut seen_nodes = HashSet::new();
+                    
+                    // Find the index of the primary node in the ring
+                    let primary_idx = ring.ring.iter().position(|(h, n)| {
+                        // Find the first node >= hash (wrapping around)
+                        *n == primary_node && *h >= hash
+                    }).unwrap_or_else(|| {
+                        // Fallback: find any node with this ID
+                        ring.ring.iter().position(|(_, n)| *n == primary_node).unwrap_or(0)
+                    });
+                    
+                    seen_nodes.insert(primary_node);
+                    
+                    // Walk the ring to find next nodes for replicas
+                    let mut current_idx = (primary_idx + 1) % ring.ring.len();
+                    while replica_count < self.replication_factor && replica_count < nodes.len() as u32 {
+                        if current_idx == primary_idx {
+                            // Wrapped around, break
+                            break;
+                        }
+                        
+                        let (_, next_node) = &ring.ring[current_idx];
+                        if !seen_nodes.contains(next_node) {
+                            assignment.get_mut(next_node).unwrap().push(partition);
+                            seen_nodes.insert(*next_node);
+                            replica_count += 1;
+                        }
+                        
+                        current_idx = (current_idx + 1) % ring.ring.len();
+                    }
+                }
             }
         }
 

@@ -5,6 +5,7 @@ use crate::error::Result;
 use crate::execution::{JoinBuilder, WindowedStream};
 use crate::operators::{FilterOp, FlatMapOp, FlatMapOperator, MapOp, StreamOperator, WindowAssigner};
 use futures::stream::{self, StreamExt};
+use futures::FutureExt;
 use std::pin::Pin;
 use tokio::sync::mpsc;
 
@@ -50,6 +51,23 @@ impl Stream {
     pub fn from_channel(mut rx: mpsc::Receiver<Event>) -> Self {
         Self {
             inner: Box::pin(stream::poll_fn(move |cx| rx.poll_recv(cx))),
+        }
+    }
+
+    /// Create a stream from a source
+    pub fn from_source<S>(source: S) -> Self
+    where
+        S: crate::sources::Source + 'static,
+    {
+        Self {
+            inner: Box::pin(stream::unfold(source, |mut source| async move {
+                if source.is_exhausted() {
+                    None
+                } else {
+                    let event = source.read().await;
+                    event.map(|e| (e, source))
+                }
+            })),
         }
     }
 
@@ -144,6 +162,27 @@ impl Stream {
     /// Count the number of events in the stream
     pub async fn count(self) -> Result<usize> {
         Ok(self.inner.count().await)
+    }
+
+    /// Write events to a sink
+    pub async fn sink<S>(self, mut sink: S) -> Result<()>
+    where
+        S: crate::sinks::Sink,
+    {
+        use futures::StreamExt;
+        let mut stream = self.inner;
+        
+        while let Some(event) = stream.next().await {
+            sink.write(event)
+                .await
+                .map_err(|e| crate::error::StreamError::Unknown(format!("Sink error: {}", e)))?;
+        }
+        
+        sink.close()
+            .await
+            .map_err(|e| crate::error::StreamError::Unknown(format!("Sink close error: {}", e)))?;
+        
+        Ok(())
     }
 
     /// Execute a function for each event (side effects)

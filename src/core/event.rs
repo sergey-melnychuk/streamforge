@@ -15,17 +15,19 @@ use std::sync::Arc;
 pub type Timestamp = i64;
 
 /// Event key used for partitioning and joins
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[derive(Default)]
 pub enum EventKey {
     /// No key (null key)
     #[default]
     None,
     /// String key
+    #[serde(with = "serde_str")]
     String(Arc<str>),
     /// Integer key
     Int(i64),
     /// Binary key
+    #[serde(with = "serde_bytes")]
     Bytes(Bytes),
 }
 
@@ -47,6 +49,46 @@ impl EventKey {
     }
 }
 
+// Helper modules for serialization
+mod serde_str {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::sync::Arc;
+    
+    pub fn serialize<S>(s: &Arc<str>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        s.as_ref().serialize(serializer)
+    }
+    
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Arc<str>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(s.into())
+    }
+}
+
+mod serde_bytes {
+    use bytes::Bytes;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    
+    pub fn serialize<S>(b: &Bytes, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        b.as_ref().serialize(serializer)
+    }
+    
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Bytes, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let v = Vec::<u8>::deserialize(deserializer)?;
+        Ok(v.into())
+    }
+}
 
 impl fmt::Display for EventKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -60,7 +102,7 @@ impl fmt::Display for EventKey {
 }
 
 /// Event value payload
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[derive(Default)]
 pub enum EventValue {
     /// Null value
@@ -73,8 +115,10 @@ pub enum EventValue {
     /// Float value
     Float(f64),
     /// String value
+    #[serde(with = "serde_str")]
     String(Arc<str>),
     /// Binary value
+    #[serde(with = "serde_bytes")]
     Bytes(Bytes),
     /// JSON-like structured data
     Json(serde_json::Value),
@@ -185,7 +229,7 @@ impl From<&str> for EventValue {
 /// - A value payload
 /// - A timestamp for event-time processing
 /// - Optional headers for metadata
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Event {
     /// Event key for partitioning
     pub key: EventKey,

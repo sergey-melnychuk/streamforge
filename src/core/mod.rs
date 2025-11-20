@@ -9,8 +9,13 @@ pub mod event;
 pub mod partition;
 pub mod time;
 pub mod watermark;
+pub mod watermark_generator;
 
 pub use event::{Event, EventKey, EventValue, Timestamp};
 pub use partition::{Partition, PartitionKey, Partitioner};
 pub use time::{EventTime, ProcessingTime, TimeCharacteristic};
 pub use watermark::Watermark;
+pub use watermark_generator::{
+    PeriodicWatermarkGenerator, PartitionedWatermarkTracker, WatermarkStrategy,
+    BoundedOutOfOrderStrategy,
+};

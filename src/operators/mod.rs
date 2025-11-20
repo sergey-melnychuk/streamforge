@@ -9,6 +9,7 @@ pub mod flatmap;
 pub mod window;
 pub mod aggregate;
 pub mod join;
+pub mod stateful;
 
 pub use filter::FilterOp;
 pub use map::MapOp;
@@ -16,6 +17,7 @@ pub use flatmap::FlatMapOp;
 pub use window::{Window, WindowAssigner, WindowType, TumblingWindow, SlidingWindow, SessionWindow};
 pub use aggregate::{AggregateFunction, Sum, Count, Avg, Min, Max};
 pub use join::{JoinType, JoinState, JoinedEvent, TemporalConstraint};
+pub use stateful::{StatefulOperator, OperatorState, CountOperator};
 
 use crate::core::Event;
 use crate::error::Result;

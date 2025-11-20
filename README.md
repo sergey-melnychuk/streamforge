@@ -35,15 +35,32 @@ StreamForge is a high-performance stream processing engine designed for:
 - ✅ JoinedStream API
 - ✅ 63/63 tests passing
 
-**Phase 4: Distribution (Initial)** ✅ **COMPLETE**
+**Phase 4: Distribution** ✅ **COMPLETE**
+
+**Phase 5: Persistence** ✅ **COMPLETE**
+
+**Phase 6: Query Engine** 🚧 **IN PROGRESS**
+
+**Phase 7: Production Readiness** 🚧 **IN PROGRESS**
 
 - ✅ Node model and cluster membership
 - ✅ Gossip-based discovery protocol
+- ✅ Raft consensus for coordination
+- ✅ Leader election and log replication
 - ✅ Partition assignment (consistent hashing)
 - ✅ Membership event system
-- ✅ 89/89 tests passing
+- ✅ Network communication (RPC, transport)
+- ✅ 111/111 tests passing
 
-See [PLAN.md](PLAN.md) for full roadmap and [DONE.md](DONE.md) for progress tracking.
+**Network Layer** ✅ **COMPLETE**
+
+- ✅ TCP transport layer with connection management
+- ✅ Binary protocol with length-prefixed framing
+- ✅ RPC client/server for cluster communication
+- ✅ Network integration with gossip discovery
+- ✅ 99/99 tests passing
+
+See [etc/PLAN.md](etc/PLAN.md) for full roadmap, [etc/WORK.md](etc/WORK.md) for current status, and [etc/DONE.md](etc/DONE.md) for progress tracking.
 
 ## Quick Start
 
@@ -92,6 +109,9 @@ cargo run --example stream_join
 
 # Distributed cluster: membership, discovery, partition assignment
 cargo run --example distributed_cluster
+
+# Raft consensus: leader election and coordination
+cargo run --example raft_consensus
 ```
 
 ## Architecture
@@ -216,7 +236,7 @@ cargo test -- --nocapture
 cargo test test_stream_filter
 ```
 
-**Test Coverage**: 89/89 tests passing (100%)
+**Test Coverage**: 124/124 tests passing (100%)
 
 ## Development
 
@@ -233,8 +253,11 @@ streamforge/
 ├── examples/           # Example applications
 ├── benches/            # Performance benchmarks
 ├── tests/              # Integration tests
-├── PLAN.md             # Detailed implementation plan
-├── DONE.md             # Progress tracking
+├── etc/                # Project documentation
+│   ├── WORK.md         # Current work status and roadmap
+│   ├── DONE.md         # Progress tracking
+│   ├── PLAN.md         # Project plan
+│   └── TODO.md         # TODO items
 └── README.md           # This file
 ```
 
@@ -271,11 +294,13 @@ cargo check
 - Join state management with cleanup
 - JoinedStream API with value combining
 
-### 📋 Phase 4: Distribution
+### ✅ Phase 4: Distribution (Complete)
 - Gossip-based peer discovery
 - Raft consensus for coordination
+- Leader election and log replication
 - Partition assignment and rebalancing
 - Failure detection and recovery
+- Network communication protocol
 
 ### 📋 Phase 5: Fault Tolerance
 - Checkpointing mechanism

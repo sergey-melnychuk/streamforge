@@ -1,15 +1,18 @@
 //! Distributed cluster example
 //!
-//! Demonstrates cluster membership, discovery, and partition assignment
+//! Demonstrates cluster membership, discovery, partition assignment, and real networking
 //!
 //! Run with: cargo run --example distributed_cluster
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 use streamforge::distributed::{
-    ClusterMembership, ConsistentHashAssigner, GossipConfig, GossipDiscovery, NodeId, NodeMetadata,
-    PartitionAssigner,
+    ClusterMembership, ConsistentHashAssigner, Discovery, GossipConfig, GossipDiscovery, NodeId,
+    NodeMetadata, PartitionAssigner,
 };
+use streamforge::network::{RpcServer, Transport};
+use tokio::time::sleep;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -119,35 +122,70 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         (moved_partitions as f64 / num_partitions as f64) * 100.0
     );
 
-    // Example 4: Gossip Discovery Setup
-    println!("\n4. Gossip Discovery Setup\n");
+    // Example 4: Network Setup with RPC Server
+    println!("\n4. Network Setup with RPC Server\n");
 
-    let local_addr: SocketAddr = "127.0.0.1:8000".parse()?;
+    let local_addr: SocketAddr = "127.0.0.1:0".parse()?; // Use port 0 to get a random available port
     let local_node_meta = NodeMetadata::new(local_id, local_addr);
+
+    // Create transport and bind to address
+    let transport = Transport::bind(local_addr).await?;
+    let actual_addr = transport.local_addr();
+    println!("   Transport bound to: {}", actual_addr);
+
+    // Create RPC server with membership
+    let membership_for_rpc = Arc::new(ClusterMembership::new(local_id, 30));
+    let rpc_server = RpcServer::new(transport.clone())
+        .with_membership(membership_for_rpc.clone());
+
+    // Start RPC server in background
+    let server_handle = {
+        let rpc_server = rpc_server;
+        tokio::spawn(async move {
+            if let Err(e) = rpc_server.start().await {
+                eprintln!("RPC server error: {}", e);
+            }
+        })
+    };
+
+    println!("   RPC server started");
+    sleep(Duration::from_millis(100)).await; // Give server time to start
+
+    // Example 5: Gossip Discovery with Network Transport
+    println!("\n5. Gossip Discovery with Network Transport\n");
 
     let config = GossipConfig {
         gossip_interval: Duration::from_secs(1),
         gossip_fanout: 3,
         heartbeat_timeout: Duration::from_secs(10),
         dead_timeout: Duration::from_secs(30),
-        seed_nodes: vec!["127.0.0.1:8001".parse()?, "127.0.0.1:8002".parse()?],
+        seed_nodes: vec![], // No seed nodes for this demo
     };
 
-    let discovery = GossipDiscovery::new(local_node_meta.clone(), config.clone());
+    let mut discovery = GossipDiscovery::new(local_node_meta.clone(), config.clone())
+        .with_transport(Arc::new(transport.clone()));
 
     println!(
         "   Local node: {} @ {}",
-        local_node_meta.id, local_node_meta.address
+        local_node_meta.id, actual_addr
     );
     println!("   Gossip interval: {:?}", config.gossip_interval);
     println!("   Gossip fanout: {}", config.gossip_fanout);
     println!("   Heartbeat timeout: {:?}", config.heartbeat_timeout);
-    println!("   Seed nodes: {}", config.seed_nodes.len());
+    println!("   Network transport: enabled");
 
-    println!("\n   Discovery configured (would start gossip in production)");
+    // Start discovery (this would run indefinitely in production)
+    println!("\n   Starting gossip discovery...");
+    discovery.start().await;
+    sleep(Duration::from_millis(500)).await; // Let it run briefly
+    discovery.stop().await;
+    println!("   Discovery stopped (demo complete)");
 
-    // Example 5: Round-Robin Assignment (Alternative Strategy)
-    println!("\n5. Round-Robin Partition Assignment (Alternative)\n");
+    // Cleanup
+    server_handle.abort();
+
+    // Example 6: Round-Robin Assignment (Alternative Strategy)
+    println!("\n6. Round-Robin Partition Assignment (Alternative)\n");
 
     use streamforge::distributed::partition_assignment::RoundRobinAssigner;
 

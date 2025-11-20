@@ -4,11 +4,15 @@
 
 use crate::distributed::membership::{ClusterMembership, MembershipEvent};
 use crate::distributed::node::{NodeId, NodeMetadata, NodeStatus};
+use crate::network::protocol::Message;
+use crate::network::rpc::RpcClient;
+use crate::network::transport::Transport;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time;
+use tracing::{debug, info};
 
 /// Discovery protocol for finding cluster peers
 pub trait Discovery: Send + Sync {
@@ -50,7 +54,7 @@ impl Default for GossipConfig {
 }
 
 /// Gossip message types
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum GossipMessage {
     /// Announce presence to the cluster
     Join {
@@ -87,6 +91,10 @@ pub struct GossipDiscovery {
     event_rx: Option<mpsc::Receiver<MembershipEvent>>,
     /// Running flag
     running: Arc<std::sync::atomic::AtomicBool>,
+    /// Transport for network communication (optional)
+    transport: Option<Arc<Transport>>,
+    /// RPC client for cluster communication (optional)
+    rpc_client: Option<Arc<RpcClient>>,
 }
 
 impl GossipDiscovery {
@@ -105,7 +113,17 @@ impl GossipDiscovery {
             event_tx,
             event_rx: Some(event_rx),
             running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            transport: None,
+            rpc_client: None,
         }
+    }
+
+    /// Set the transport for network communication
+    pub fn with_transport(mut self, transport: Arc<Transport>) -> Self {
+        let rpc_client = Arc::new(RpcClient::new((*transport).clone()));
+        self.transport = Some(transport);
+        self.rpc_client = Some(rpc_client);
+        self
     }
 
     /// Get the cluster membership
@@ -182,20 +200,86 @@ impl GossipDiscovery {
             // Select nodes to gossip with
             let targets = self.select_gossip_targets();
 
-            // In a real implementation, we would send gossip messages here
-            // For now, this is a placeholder for the gossip round
-            for _target in targets {
-                // TODO: Send heartbeat and membership digest
+            // Send gossip messages if transport is available
+            if let Some(transport) = &self.transport {
+                for target in targets {
+                    // Send heartbeat
+                    let heartbeat_msg = Message::gossip(
+                        self.local_node.id,
+                        GossipMessage::Heartbeat {
+                            node_id: self.local_node.id,
+                        },
+                    );
+
+                    // Try to send (non-blocking, ignore errors)
+                    let transport_clone = Arc::clone(transport);
+                    let target_addr = target.address;
+                    tokio::spawn(async move {
+                        match transport_clone.connect(target_addr).await {
+                            Ok(conn) => {
+                                if let Err(e) = conn.send(heartbeat_msg).await {
+                                    debug!("Failed to send heartbeat to {}: {}", target_addr, e);
+                                }
+                            }
+                            Err(e) => {
+                                debug!("Failed to connect to {}: {}", target_addr, e);
+                            }
+                        }
+                    });
+
+                    // Send membership digest
+                    let alive_nodes = self.membership.get_alive_nodes();
+                    let digest_msg = Message::gossip(
+                        self.local_node.id,
+                        GossipMessage::MembershipDigest {
+                            nodes: alive_nodes,
+                        },
+                    );
+
+                    let transport_clone = Arc::clone(transport);
+                    let target_addr = target.address;
+                    tokio::spawn(async move {
+                        match transport_clone.connect(target_addr).await {
+                            Ok(conn) => {
+                                if let Err(e) = conn.send(digest_msg).await {
+                                    debug!("Failed to send digest to {}: {}", target_addr, e);
+                                }
+                            }
+                            Err(e) => {
+                                debug!("Failed to connect to {}: {}", target_addr, e);
+                            }
+                        }
+                    });
+                }
             }
         }
     }
 
     /// Bootstrap from seed nodes
     async fn bootstrap(&self) {
-        // In a real implementation, we would contact seed nodes
-        // and exchange membership information
-        for _seed in &self.config.seed_nodes {
-            // TODO: Contact seed node and join cluster
+        if let Some(rpc_client) = &self.rpc_client {
+            info!("Bootstrapping from {} seed nodes", self.config.seed_nodes.len());
+            for seed in &self.config.seed_nodes {
+                match rpc_client.join(*seed, self.local_node.clone()).await {
+                    Ok(response) => {
+                        info!("Successfully joined cluster via {}", seed);
+                        // Add all cluster nodes to membership
+                        for node in response.cluster_nodes {
+                            if node.id != self.local_node.id {
+                                if let Some(event) = self.membership.add_node(node) {
+                                    let _ = self.event_tx.send(event).await;
+                                }
+                            }
+                        }
+                        break; // Successfully joined, no need to try other seeds
+                    }
+                    Err(e) => {
+                        debug!("Failed to join via {}: {}", seed, e);
+                    }
+                }
+            }
+        } else {
+            debug!("No RPC client available, skipping bootstrap");
         }
     }
 }
@@ -232,6 +316,8 @@ impl Clone for GossipDiscovery {
             event_tx: self.event_tx.clone(),
             event_rx: None, // Can't clone receiver
             running: Arc::clone(&self.running),
+            transport: self.transport.clone(),
+            rpc_client: self.rpc_client.clone(),
         }
     }
 }

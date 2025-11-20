@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Unique identifier for a node in the cluster
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct NodeId(u64);
 
 impl NodeId {
@@ -53,7 +53,7 @@ impl From<u64> for NodeId {
 }
 
 /// Status of a node in the cluster
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum NodeStatus {
     /// Node is alive and participating
     Alive,
@@ -66,7 +66,7 @@ pub enum NodeStatus {
 }
 
 /// Metadata about a node in the cluster
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct NodeMetadata {
     /// Unique node identifier
     pub id: NodeId,
@@ -227,11 +227,20 @@ mod tests {
         let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
         let mut metadata = NodeMetadata::new(id, addr);
 
+        // Set initial heartbeat to an older value to test update
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        metadata.last_heartbeat = now - 10; // Set to 10 seconds ago
         let initial_heartbeat = metadata.last_heartbeat;
-        std::thread::sleep(std::time::Duration::from_secs(2));
+
+        // Update heartbeat
         metadata.update_heartbeat();
 
+        // Verify heartbeat was updated to current time
         assert!(metadata.last_heartbeat > initial_heartbeat);
+        assert!(metadata.last_heartbeat >= now);
     }
 
     #[test]
