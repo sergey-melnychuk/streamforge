@@ -1,0 +1,80 @@
+[package]
+name = "streamforge"
+version = "0.1.0"
+edition = "2021"
+authors = ["Sergey Melnychuk"]
+description = "Ultra-fast, distributed stream processing engine"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sergey-melnychuk/streamforge"
+keywords = ["stream-processing", "distributed", "real-time", "event-streaming"]
+categories = ["concurrency", "database", "network-programming"]
+
+[lib]
+name = "streamforge"
+path = "src/lib.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+futures = "0.3"
+
+# Concurrent data structures
+crossbeam = "0.8"
+dashmap = "5.5"
+parking_lot = "0.12"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+bytes = "1.5"
+
+# Logging and tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Metrics
+metrics = "0.21"
+
+# Time utilities
+chrono = "0.4"
+
+# System info
+num_cpus = "1.16"
+
+# JSON support
+serde_json = "1.0"
+
+# Random number generation
+rand = "0.8"
+
+[dev-dependencies]
+criterion = { version = "0.7", features = ["async", "async_tokio", "html_reports"] }
+proptest = "1.4"
+tokio-test = "0.4"
+tempfile = "3.8"
+
+[[bench]]
+name = "throughput"
+harness = false
+
+[[bench]]
+name = "latency"
+harness = false
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.bench]
+inherits = "release"
+
+[profile.dev]
+opt-level = 0
+
+[profile.test]
+opt-level = 1
