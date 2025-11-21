@@ -2,8 +2,10 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::tracing::context::{TraceContext, TraceId, SpanId};
-    use crate::tracing::instrumentation::{current_context, set_context, clear_context, with_trace_context};
+    use crate::tracing::context::{SpanId, TraceContext, TraceId};
+    use crate::tracing::instrumentation::{
+        clear_context, current_context, set_context, with_trace_context,
+    };
     use bincode;
 
     #[test]
@@ -50,15 +52,21 @@ mod tests {
 
         // Serialize
         let serialized = bincode::serialize(&ctx).unwrap();
-        
+
         // Deserialize
         let deserialized: TraceContext = bincode::deserialize(&serialized).unwrap();
-        
+
         assert_eq!(deserialized.trace_id, ctx.trace_id);
         assert_eq!(deserialized.span_id, ctx.span_id);
         assert_eq!(deserialized.parent_span_id, ctx.parent_span_id);
-        assert_eq!(deserialized.get_attribute("key1"), Some(&"value1".to_string()));
-        assert_eq!(deserialized.get_attribute("key2"), Some(&"value2".to_string()));
+        assert_eq!(
+            deserialized.get_attribute("key1"),
+            Some(&"value1".to_string())
+        );
+        assert_eq!(
+            deserialized.get_attribute("key2"),
+            Some(&"value2".to_string())
+        );
     }
 
     #[test]

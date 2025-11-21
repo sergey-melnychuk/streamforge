@@ -3,7 +3,7 @@
 //! Wraps any state backend to ensure idempotent state updates based on transaction IDs
 
 use crate::execution::exactly_once::TransactionId;
-use crate::state::backend::{StateBackend, StateError, StateResult};
+use crate::state::backend::{StateBackend, StateResult};
 use async_trait::async_trait;
 use bytes::Bytes;
 use std::collections::{HashMap, HashSet};
@@ -32,6 +32,7 @@ impl IdempotentStateBackend {
 
     /// Extract transaction ID from value (assumes value contains transaction ID metadata)
     /// In a full implementation, we'd use a structured format or separate metadata store
+    #[allow(dead_code)]
     fn extract_transaction_id(_value: &Bytes) -> Option<TransactionId> {
         // Simplified: In production, we'd parse transaction ID from value metadata
         // For now, we'll use a different approach - track transaction IDs separately
@@ -134,4 +135,3 @@ impl IdempotentStateBackend {
         Ok(())
     }
 }
-

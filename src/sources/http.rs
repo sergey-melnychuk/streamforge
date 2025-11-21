@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use serde_json::Value as JsonValue;
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 
 /// HTTP source configuration
 #[derive(Debug, Clone)]
@@ -57,9 +57,7 @@ pub struct HttpSource {
 impl HttpSource {
     /// Create a new HTTP source
     pub fn new(config: HttpSourceConfig) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let client = reqwest::Client::builder()
-            .timeout(config.timeout)
-            .build()?;
+        let client = reqwest::Client::builder().timeout(config.timeout).build()?;
 
         Ok(Self {
             config,
@@ -70,7 +68,9 @@ impl HttpSource {
     }
 
     /// Create from a single URL (for simple use cases)
-    pub fn from_url(url: impl Into<String>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn from_url(
+        url: impl Into<String>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         Self::new(HttpSourceConfig {
             urls: vec![url.into()],
             ..Default::default()
@@ -107,10 +107,16 @@ impl HttpSource {
                 Err(e) => {
                     retries += 1;
                     if retries >= self.config.max_retries {
-                        error!("Failed to fetch from {} after {} retries: {}", url, retries, e);
+                        error!(
+                            "Failed to fetch from {} after {} retries: {}",
+                            url, retries, e
+                        );
                         return Err(e);
                     }
-                    warn!("Retry {}/{} for {}: {}", retries, self.config.max_retries, url, e);
+                    warn!(
+                        "Retry {}/{} for {}: {}",
+                        retries, self.config.max_retries, url, e
+                    );
                     sleep(self.config.retry_delay).await;
                 }
             }
@@ -118,7 +124,10 @@ impl HttpSource {
     }
 
     /// Fetch data from URL with retry logic
-    async fn fetch_with_retry(&self, url: &str) -> Result<Option<Event>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn fetch_with_retry(
+        &self,
+        url: &str,
+    ) -> Result<Option<Event>, Box<dyn std::error::Error + Send + Sync>> {
         let mut request = self.client.get(url);
 
         // Add headers
@@ -136,8 +145,7 @@ impl HttpSource {
 
         // Extract value using JSON path
         let value = if let Some(path) = &self.config.value_path {
-            Self::extract_json_path(&json, path)
-                .unwrap_or_else(|| EventValue::Json(json.clone()))
+            Self::extract_json_path(&json, path).unwrap_or_else(|| EventValue::Json(json.clone()))
         } else {
             EventValue::Json(json.clone())
         };
@@ -155,11 +163,7 @@ impl HttpSource {
             EventKey::default()
         };
 
-        let event = Event::new(
-            key,
-            value,
-            chrono::Utc::now().timestamp_millis(),
-        );
+        let event = Event::new(key, value, chrono::Utc::now().timestamp_millis());
 
         Ok(Some(event))
     }
@@ -183,10 +187,8 @@ impl HttpSource {
             JsonValue::Number(n) => {
                 if let Some(i) = n.as_i64() {
                     Some(EventValue::Int(i))
-                } else if let Some(f) = n.as_f64() {
-                    Some(EventValue::Float(f))
                 } else {
-                    None
+                    n.as_f64().map(EventValue::Float)
                 }
             }
             JsonValue::String(s) => Some(EventValue::String(s.clone().into())),
@@ -277,4 +279,3 @@ mod tests {
         assert!(matches!(value, Some(EventValue::String(_))));
     }
 }
-

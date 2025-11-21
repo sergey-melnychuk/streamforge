@@ -90,13 +90,17 @@ impl FileSource {
                 let key = json
                     .get("key")
                     .and_then(|k| k.as_str())
-                    .map(|s| EventKey::from_str(s))
+                    .map(EventKey::from_str)
                     .unwrap_or_else(EventKey::default);
 
                 // Use the JSON as the value
                 let value = EventValue::Json(json);
 
-                Some(Event::new(key, value, chrono::Utc::now().timestamp_millis()))
+                Some(Event::new(
+                    key,
+                    value,
+                    chrono::Utc::now().timestamp_millis(),
+                ))
             }
             Err(e) => {
                 error!("Failed to parse JSON line: {} - {}", line, e);
@@ -108,7 +112,7 @@ impl FileSource {
     fn parse_csv_line(&self, line: &str) -> Option<Event> {
         // Simple CSV parsing (assumes header row was already read)
         let fields: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
-        
+
         if fields.is_empty() {
             return None;
         }
@@ -152,7 +156,7 @@ impl Source for FileSource {
         let result = task::spawn_blocking(move || {
             let mut reader = reader;
             let mut line = String::new();
-            
+
             match reader.read_line(&mut line) {
                 Ok(0) => {
                     // EOF
@@ -199,15 +203,15 @@ impl Source for FileSource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
     use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[tokio::test]
     async fn test_file_source_json() {
         let file = NamedTempFile::new().unwrap();
         let path = file.path().to_string_lossy().to_string();
         drop(file); // Close the file so we can write to it
-        
+
         // Write JSON lines to the file (with actual newlines)
         let json = "{\"key\": \"test\", \"value\": 42}\n{\"key\": \"test2\", \"value\": 43}\n";
         std::fs::write(&path, json).unwrap();
@@ -216,14 +220,15 @@ mod tests {
             path,
             format: "json".to_string(),
             follow: false,
-        }).unwrap();
+        })
+        .unwrap();
 
         let event1 = source.read().await;
         assert!(event1.is_some());
-        
+
         let event2 = source.read().await;
         assert!(event2.is_some());
-        
+
         let event3 = source.read().await;
         assert!(event3.is_none());
         assert!(source.is_exhausted());
@@ -240,13 +245,13 @@ mod tests {
             path,
             format: "text".to_string(),
             follow: false,
-        }).unwrap();
+        })
+        .unwrap();
 
         let event1 = source.read().await;
         assert!(event1.is_some());
-        
+
         let event2 = source.read().await;
         assert!(event2.is_some());
     }
 }
-

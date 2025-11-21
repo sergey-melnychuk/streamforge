@@ -7,16 +7,16 @@
 //! - Failure detection and recovery
 //! - Network communication (RPC, transport)
 
-pub mod node;
-pub mod membership;
-pub mod discovery;
-pub mod partition_assignment;
 pub mod consensus;
+pub mod discovery;
+pub mod membership;
+pub mod node;
+pub mod partition_assignment;
 pub mod replication;
 
-pub use node::{Node, NodeId, NodeMetadata, NodeStatus};
+pub use consensus::{Raft, RaftConfig, RaftError, RaftEvent, RaftResult, RaftRole};
+pub use discovery::{Discovery, GossipConfig, GossipDiscovery, GossipMessage};
 pub use membership::{ClusterMembership, MembershipEvent};
-pub use discovery::{Discovery, GossipDiscovery, GossipConfig, GossipMessage};
-pub use partition_assignment::{PartitionAssigner, ConsistentHashAssigner};
-pub use consensus::{Raft, RaftConfig, RaftEvent, RaftRole, RaftError, RaftResult};
-pub use replication::{ReplicationManager, ReplicaRole, PartitionReplication};
+pub use node::{Node, NodeId, NodeMetadata, NodeStatus};
+pub use partition_assignment::{ConsistentHashAssigner, PartitionAssigner};
+pub use replication::{PartitionReplication, ReplicaRole, ReplicationManager};

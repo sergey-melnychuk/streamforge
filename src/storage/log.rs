@@ -52,7 +52,11 @@ impl AppendOnlyLog {
         // Get current file size
         let current_offset = file.metadata()?.len();
 
-        info!("Opened append-only log at {} (offset: {})", path.display(), current_offset);
+        info!(
+            "Opened append-only log at {} (offset: {})",
+            path.display(),
+            current_offset
+        );
 
         Ok(Self {
             path,
@@ -183,4 +187,3 @@ mod tests {
         assert_eq!(log.size().await.unwrap(), 0);
     }
 }
-

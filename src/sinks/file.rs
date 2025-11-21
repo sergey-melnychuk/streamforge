@@ -40,7 +40,7 @@ impl FileSink {
     /// Create a new file sink
     pub fn new(config: FileSinkConfig) -> Result<Self, SinkError> {
         let path = Path::new(&config.path);
-        
+
         // Create parent directory if it doesn't exist
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -73,15 +73,18 @@ impl FileSink {
             "json" => self.serialize_json(event),
             "csv" => self.serialize_csv(event),
             "text" => self.serialize_text(event),
-            _ => Err(SinkError::Other(format!("Unknown format: {}", self.config.format))),
+            _ => Err(SinkError::Other(format!(
+                "Unknown format: {}",
+                self.config.format
+            ))),
         }
     }
 
     fn serialize_json(&self, event: &Event) -> Result<String, SinkError> {
         use serde_json::json;
-        
+
         let mut obj = serde_json::Map::new();
-        
+
         // Add key
         match &event.key {
             crate::core::EventKey::None => {}
@@ -126,8 +129,7 @@ impl FileSink {
             _ => {}
         }
 
-        serde_json::to_string(&json!(obj))
-            .map_err(|e| SinkError::Serialization(e.to_string()))
+        serde_json::to_string(&json!(obj)).map_err(|e| SinkError::Serialization(e.to_string()))
     }
 
     fn serialize_csv(&self, _event: &Event) -> Result<String, SinkError> {
@@ -149,10 +151,10 @@ impl Sink for FileSink {
     async fn write(&mut self, event: Event) -> Result<(), SinkError> {
         let line = self.serialize_event(&event)?;
         let mut file = self.file.lock().await;
-        
+
         writeln!(file, "{}", line)?;
         file.flush()?;
-        
+
         debug!("Wrote event to file: {}", self.config.path);
         Ok(())
     }
@@ -174,8 +176,8 @@ impl Sink for FileSink {
 mod tests {
     use super::*;
     use crate::core::{Event, EventKey, EventValue};
-    use tempfile::NamedTempFile;
     use std::fs;
+    use tempfile::NamedTempFile;
 
     #[tokio::test]
     async fn test_file_sink_json() {
@@ -186,7 +188,8 @@ mod tests {
             path: path.clone(),
             format: "json".to_string(),
             append: false,
-        }).unwrap();
+        })
+        .unwrap();
 
         let event = Event::new(
             EventKey::from_str("test"),
@@ -202,4 +205,3 @@ mod tests {
         assert!(content.contains("42"));
     }
 }
-

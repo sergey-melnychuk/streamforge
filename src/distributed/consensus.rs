@@ -54,7 +54,8 @@ impl Serialize for LogEntry {
             term: self.term,
             index: self.index,
             data: self.data.to_vec(),
-        }.serialize(serializer)
+        }
+        .serialize(serializer)
     }
 }
 
@@ -207,11 +208,7 @@ impl Default for RaftConfig {
 
 impl Raft {
     /// Create a new Raft instance
-    pub fn new(
-        local_id: NodeId,
-        transport: Arc<Transport>,
-        config: RaftConfig,
-    ) -> Self {
+    pub fn new(local_id: NodeId, transport: Arc<Transport>, config: RaftConfig) -> Self {
         let (event_tx, event_rx) = mpsc::channel(100);
         let rpc_client = Arc::new(RpcClient::new((*transport).clone()));
 
@@ -263,7 +260,8 @@ impl Raft {
 
     /// Start the Raft node
     pub async fn start(&self) -> RaftResult<()> {
-        self.running.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.running
+            .store(true, std::sync::atomic::Ordering::Relaxed);
         info!("Raft node {} started", self.local_id);
 
         // Start as follower
@@ -283,7 +281,8 @@ impl Raft {
 
     /// Stop the Raft node
     pub async fn stop(&self) {
-        self.running.store(false, std::sync::atomic::Ordering::Relaxed);
+        self.running
+            .store(false, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Main Raft loop
@@ -343,14 +342,22 @@ impl Raft {
         // Request votes from all nodes
         let nodes = self.nodes.read().await.clone();
         let mut votes = 1; // Vote for self
-        let votes_needed = (nodes.len() + 1) / 2 + 1; // Majority
+        let votes_needed = nodes.len().div_ceil(2) + 1; // Majority
 
         let last_log_index;
         let _last_log_term;
         {
             let state = self.state.read().await;
-            last_log_index = if state.log.is_empty() { 0 } else { state.log.len() as u64 - 1 };
-            _last_log_term = if state.log.is_empty() { 0 } else { state.log[last_log_index as usize].term };
+            last_log_index = if state.log.is_empty() {
+                0
+            } else {
+                state.log.len() as u64 - 1
+            };
+            _last_log_term = if state.log.is_empty() {
+                0
+            } else {
+                state.log[last_log_index as usize].term
+            };
         }
 
         // Request votes from all nodes
@@ -364,11 +371,13 @@ impl Raft {
             let local_id = self.local_id;
             let node_id = *node_id;
             let address = *address;
-            let term = term;
-            let last_log_index = last_log_index;
             let last_log_term = {
                 let state = self.state.read().await;
-                if state.log.is_empty() { 0 } else { state.log[last_log_index as usize].term }
+                if state.log.is_empty() {
+                    0
+                } else {
+                    state.log[last_log_index as usize].term
+                }
             };
 
             let task = tokio::spawn(async move {
@@ -379,8 +388,8 @@ impl Raft {
                     last_log_term,
                 };
 
-                let payload = bincode::serialize(&args)
-                    .map_err(|e| format!("Serialization error: {}", e))?;
+                let payload =
+                    bincode::serialize(&args).map_err(|e| format!("Serialization error: {}", e))?;
 
                 match rpc_client.call(address, "raft_request_vote", payload).await {
                     Ok(response) => {
@@ -419,10 +428,13 @@ impl Raft {
             state.role = RaftRole::Leader;
             state.leader_id = Some(self.local_id);
 
-            let _ = self.event_tx.send(RaftEvent::LeaderElected {
-                term,
-                leader_id: self.local_id,
-            }).await;
+            let _ = self
+                .event_tx
+                .send(RaftEvent::LeaderElected {
+                    term,
+                    leader_id: self.local_id,
+                })
+                .await;
         } else {
             // Didn't get majority, go back to follower
             let mut state = self.state.write().await;
@@ -436,11 +448,22 @@ impl Raft {
         let nodes = self.nodes.read().await.clone();
         let (term, commit_index, prev_log_index, prev_log_term) = {
             let state = self.state.read().await;
-            let prev_log_index = if state.log.is_empty() { 0 } else { state.log.len() as u64 };
-            let prev_log_term = if state.log.is_empty() { 0 } else { 
-                state.log[prev_log_index as usize - 1].term 
+            let prev_log_index = if state.log.is_empty() {
+                0
+            } else {
+                state.log.len() as u64
             };
-            (state.current_term, state.commit_index, prev_log_index, prev_log_term)
+            let prev_log_term = if state.log.is_empty() {
+                0
+            } else {
+                state.log[prev_log_index as usize - 1].term
+            };
+            (
+                state.current_term,
+                state.commit_index,
+                prev_log_index,
+                prev_log_term,
+            )
         };
 
         // Send AppendEntries (heartbeat) to all followers
@@ -452,10 +475,6 @@ impl Raft {
             let rpc_client = Arc::clone(&self.rpc_client);
             let address = *address;
             let leader_id = self.local_id;
-            let term = term;
-            let prev_log_index = prev_log_index;
-            let prev_log_term = prev_log_term;
-            let commit_index = commit_index;
 
             tokio::spawn(async move {
                 let args = AppendEntriesArgs {
@@ -472,7 +491,10 @@ impl Raft {
                     Err(_) => return,
                 };
 
-                if let Ok(response) = rpc_client.call(address, "raft_append_entries", payload).await {
+                if let Ok(response) = rpc_client
+                    .call(address, "raft_append_entries", payload)
+                    .await
+                {
                     if let Ok(result) = bincode::deserialize::<AppendEntriesResult>(&response) {
                         if result.term > term {
                             // Higher term seen, would need to step down
@@ -487,9 +509,7 @@ impl Raft {
 
         // Check if we're still leader (could have been demoted)
         let state = self.state.read().await;
-        if state.role != RaftRole::Leader || state.current_term != term {
-            return;
-        }
+        if state.role != RaftRole::Leader || state.current_term != term {}
     }
 
     /// Generate random election timeout
@@ -522,7 +542,8 @@ impl Raft {
         }
 
         // If votedFor is null or candidateId, and candidate's log is at least as up-to-date as receiver's log, grant vote
-        let vote_granted = (state.voted_for.is_none() || state.voted_for == Some(args.candidate_id))
+        let vote_granted = (state.voted_for.is_none()
+            || state.voted_for == Some(args.candidate_id))
             && self.is_log_up_to_date(&state, args.last_log_index, args.last_log_term);
 
         if vote_granted {
@@ -559,9 +580,10 @@ impl Raft {
         state.role = RaftRole::Follower;
 
         // Check if log matches
-        let success = if args.prev_log_index == 0 || 
-            (args.prev_log_index <= state.log.len() as u64 && 
-             state.log[args.prev_log_index as usize - 1].term == args.prev_log_term) {
+        let success = if args.prev_log_index == 0
+            || (args.prev_log_index <= state.log.len() as u64
+                && state.log[args.prev_log_index as usize - 1].term == args.prev_log_term)
+        {
             // Append new entries
             if !args.entries.is_empty() {
                 // Truncate log if necessary
@@ -588,7 +610,12 @@ impl Raft {
     }
 
     /// Check if candidate's log is at least as up-to-date as receiver's log
-    fn is_log_up_to_date(&self, state: &RaftState, last_log_index: u64, last_log_term: u64) -> bool {
+    fn is_log_up_to_date(
+        &self,
+        state: &RaftState,
+        last_log_index: u64,
+        last_log_term: u64,
+    ) -> bool {
         if state.log.is_empty() {
             return true;
         }
@@ -596,8 +623,8 @@ impl Raft {
         let our_last_term = state.log.last().unwrap().term;
         let our_last_index = state.log.len() as u64 - 1;
 
-        last_log_term > our_last_term || 
-        (last_log_term == our_last_term && last_log_index >= our_last_index)
+        last_log_term > our_last_term
+            || (last_log_term == our_last_term && last_log_index >= our_last_index)
     }
 
     /// Get events channel
@@ -746,4 +773,3 @@ mod tests {
         assert!(raft.is_leader().await);
     }
 }
-

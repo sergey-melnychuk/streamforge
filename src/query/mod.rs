@@ -3,12 +3,11 @@
 //! Provides query language, parser, optimizer, and execution
 
 pub mod ast;
-pub mod parser;
-pub mod optimizer;
 pub mod executor;
+pub mod optimizer;
+pub mod parser;
 
-pub use ast::{Query, SelectClause, FromClause, WhereClause, Aggregation};
-pub use parser::QueryParser;
-pub use optimizer::QueryOptimizer;
+pub use ast::{Aggregation, FromClause, Query, SelectClause, WhereClause};
 pub use executor::QueryExecutor;
-
+pub use optimizer::QueryOptimizer;
+pub use parser::QueryParser;

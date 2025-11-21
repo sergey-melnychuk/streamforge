@@ -3,7 +3,7 @@
 //! Integrates watermarks with stream processing for event-time windowing
 //! and late data handling.
 
-use crate::core::{Event, Timestamp, Watermark};
+use crate::core::{Event, Watermark};
 use crate::error::Result;
 use crate::operators::{AggregateFunction, Window, WindowAssigner};
 use std::collections::HashMap;
@@ -79,7 +79,7 @@ where
     }
 
     /// Process an event with watermark awareness
-    pub async fn process_event<A>(&self, event: Event, agg_fn: &A) -> Result<()>
+    pub async fn process_event<A>(&self, event: Event, _agg_fn: &A) -> Result<()>
     where
         A: AggregateFunction + 'static,
     {
@@ -103,11 +103,9 @@ where
             // In production, you'd want proper type-safe accumulator storage
             // This is a placeholder that tracks window state
             let mut states = self.window_states.write().await;
-            let state = states.entry(state_key.clone()).or_insert_with(|| {
-                WindowState {
-                    is_closed: false,
-                }
-            });
+            let state = states
+                .entry(state_key.clone())
+                .or_insert_with(|| WindowState { is_closed: false });
 
             // Only process if window is not closed
             // Note: Actual aggregation would happen in a separate step
@@ -122,9 +120,12 @@ where
     }
 
     /// Update the watermark
-    pub async fn update_watermark(&self, watermark: Watermark) -> Vec<(Window, crate::core::EventKey, crate::core::EventValue)> {
+    pub async fn update_watermark(
+        &self,
+        watermark: Watermark,
+    ) -> Vec<(Window, crate::core::EventKey, crate::core::EventValue)> {
         let mut current = self.watermark.write().await;
-        
+
         // Only advance watermark
         if watermark.timestamp() > current.timestamp() {
             current.advance(watermark.timestamp());
@@ -140,7 +141,9 @@ where
     /// Check if an event is late
     fn is_late_event(&self, event: &Event, window: &Window, watermark: Watermark) -> bool {
         // Event is late if its timestamp is before the watermark minus allowed lateness
-        let late_threshold = watermark.timestamp().saturating_sub(self.late_data_config.allowed_lateness);
+        let late_threshold = watermark
+            .timestamp()
+            .saturating_sub(self.late_data_config.allowed_lateness);
         event.timestamp < late_threshold && watermark.timestamp() > window.end
     }
 
@@ -166,15 +169,19 @@ where
     }
 
     /// Trigger windows that should be closed based on watermark
-    async fn trigger_windows(&self, watermark: Watermark) -> Vec<(Window, crate::core::EventKey, crate::core::EventValue)> {
+    async fn trigger_windows(
+        &self,
+        watermark: Watermark,
+    ) -> Vec<(Window, crate::core::EventKey, crate::core::EventValue)> {
         let mut states = self.window_states.write().await;
-        let mut triggered = Vec::new();
+        let triggered = Vec::new();
 
         // Find windows that should be closed
         let windows_to_close: Vec<_> = states
             .iter()
             .filter(|((window, _), state)| {
-                !state.is_closed && watermark.timestamp() >= window.end + self.late_data_config.allowed_lateness
+                !state.is_closed
+                    && watermark.timestamp() >= window.end + self.late_data_config.allowed_lateness
             })
             .map(|(key, _)| key.clone())
             .collect();
@@ -204,6 +211,7 @@ where
 /// Watermark emitter that periodically generates watermarks from events
 pub struct WatermarkEmitter {
     generator: Arc<crate::core::PeriodicWatermarkGenerator>,
+    #[allow(dead_code)]
     watermark_receiver: tokio::sync::mpsc::Receiver<Watermark>,
     watermark_sender: tokio::sync::mpsc::Sender<Watermark>,
 }
@@ -211,9 +219,11 @@ pub struct WatermarkEmitter {
 impl WatermarkEmitter {
     /// Create a new watermark emitter
     pub fn new(max_out_of_orderness: i64) -> Self {
-        let generator = Arc::new(crate::core::PeriodicWatermarkGenerator::new(max_out_of_orderness));
+        let generator = Arc::new(crate::core::PeriodicWatermarkGenerator::new(
+            max_out_of_orderness,
+        ));
         let (sender, receiver) = tokio::sync::mpsc::channel(100);
-        
+
         Self {
             generator,
             watermark_receiver: receiver,
@@ -253,16 +263,15 @@ mod tests {
 
         let event = Event::new(EventKey::from_str("key1"), EventValue::from_int(1), 1000);
         let agg_fn = Count::new();
-        
+
         stream.process_event(event, &agg_fn).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_watermark_emitter() {
         let emitter = WatermarkEmitter::new(1000);
-        
+
         let event = Event::new(EventKey::None, EventValue::from_int(1), 5000);
         emitter.process_event(&event).await.unwrap();
     }
 }
-

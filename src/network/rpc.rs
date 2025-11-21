@@ -9,7 +9,7 @@ use crate::network::protocol::{
 };
 use crate::network::transport::{Transport, TransportConnection, TransportError};
 use crate::tracing::context::TraceContext;
-use crate::tracing::instrumentation::{current_context, set_context, with_trace_context};
+use crate::tracing::instrumentation::{current_context, set_context};
 use bincode;
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -39,7 +39,11 @@ pub type RpcResult<T> = Result<T, RpcError>;
 
 /// Handler function for RPC methods
 pub type RpcHandler = Arc<
-    dyn Fn(String, Vec<u8>) -> std::pin::Pin<Box<dyn std::future::Future<Output = RpcResult<Vec<u8>>> + Send>>
+    dyn Fn(
+            String,
+            Vec<u8>,
+        )
+            -> std::pin::Pin<Box<dyn std::future::Future<Output = RpcResult<Vec<u8>>> + Send>>
         + Send
         + Sync,
 >;
@@ -90,9 +94,9 @@ impl RpcClient {
         payload: Vec<u8>,
     ) -> RpcResult<Vec<u8>> {
         // Get or create trace context
-        let trace_ctx = current_context().unwrap_or_else(|| TraceContext::new());
+        let trace_ctx = current_context().unwrap_or_default();
         let child_ctx = trace_ctx.child();
-        
+
         let span = span!(
             Level::INFO,
             "rpc.call",
@@ -102,7 +106,7 @@ impl RpcClient {
             span_id = %child_ctx.span_id,
         );
         let _guard = span.enter();
-        
+
         let request_id = self.next_request_id().await;
         let conn = self.get_connection(addr).await?;
 
@@ -129,7 +133,7 @@ impl RpcClient {
                         if let Some(ctx) = resp.trace_context {
                             set_context(ctx);
                         }
-                        
+
                         if resp.success {
                             return Ok(resp.payload);
                         } else {
@@ -156,12 +160,10 @@ impl RpcClient {
     /// Join a cluster
     pub async fn join(&self, addr: SocketAddr, node: NodeMetadata) -> RpcResult<JoinResponse> {
         let request = JoinRequest { node };
-        let payload = bincode::serialize(&request)
-            .map_err(|e| RpcError::Serialization(e.to_string()))?;
+        let payload =
+            bincode::serialize(&request).map_err(|e| RpcError::Serialization(e.to_string()))?;
 
-        let response_payload = self
-            .call(addr, RpcMethod::Join.as_str(), payload)
-            .await?;
+        let response_payload = self.call(addr, RpcMethod::Join.as_str(), payload).await?;
 
         let response: JoinResponse = bincode::deserialize(&response_payload)
             .map_err(|e| RpcError::Deserialization(e.to_string()))?;
@@ -191,21 +193,22 @@ impl RpcClient {
         events: Vec<crate::core::Event>,
     ) -> RpcResult<crate::network::protocol::ReplicateDataResponse> {
         use crate::network::protocol::ReplicateDataRequest;
-        
+
         let request = ReplicateDataRequest {
             partition,
             sequence,
             events,
         };
-        let payload = bincode::serialize(&request)
-            .map_err(|e| RpcError::Serialization(e.to_string()))?;
+        let payload =
+            bincode::serialize(&request).map_err(|e| RpcError::Serialization(e.to_string()))?;
 
         let response_payload = self
             .call(addr, RpcMethod::ReplicateData.as_str(), payload)
             .await?;
 
-        let response: crate::network::protocol::ReplicateDataResponse = bincode::deserialize(&response_payload)
-            .map_err(|e| RpcError::Deserialization(e.to_string()))?;
+        let response: crate::network::protocol::ReplicateDataResponse =
+            bincode::deserialize(&response_payload)
+                .map_err(|e| RpcError::Deserialization(e.to_string()))?;
 
         Ok(response)
     }
@@ -218,20 +221,21 @@ impl RpcClient {
         sequence: u64,
     ) -> RpcResult<crate::network::protocol::SyncReplicaResponse> {
         use crate::network::protocol::SyncReplicaRequest;
-        
+
         let request = SyncReplicaRequest {
             partition,
             sequence,
         };
-        let payload = bincode::serialize(&request)
-            .map_err(|e| RpcError::Serialization(e.to_string()))?;
+        let payload =
+            bincode::serialize(&request).map_err(|e| RpcError::Serialization(e.to_string()))?;
 
         let response_payload = self
             .call(addr, RpcMethod::SyncReplica.as_str(), payload)
             .await?;
 
-        let response: crate::network::protocol::SyncReplicaResponse = bincode::deserialize(&response_payload)
-            .map_err(|e| RpcError::Deserialization(e.to_string()))?;
+        let response: crate::network::protocol::SyncReplicaResponse =
+            bincode::deserialize(&response_payload)
+                .map_err(|e| RpcError::Deserialization(e.to_string()))?;
 
         Ok(response)
     }
@@ -244,20 +248,21 @@ impl RpcClient {
         new_leader: crate::distributed::node::NodeId,
     ) -> RpcResult<crate::network::protocol::PromoteReplicaResponse> {
         use crate::network::protocol::PromoteReplicaRequest;
-        
+
         let request = PromoteReplicaRequest {
             partition,
             new_leader,
         };
-        let payload = bincode::serialize(&request)
-            .map_err(|e| RpcError::Serialization(e.to_string()))?;
+        let payload =
+            bincode::serialize(&request).map_err(|e| RpcError::Serialization(e.to_string()))?;
 
         let response_payload = self
             .call(addr, RpcMethod::PromoteReplica.as_str(), payload)
             .await?;
 
-        let response: crate::network::protocol::PromoteReplicaResponse = bincode::deserialize(&response_payload)
-            .map_err(|e| RpcError::Deserialization(e.to_string()))?;
+        let response: crate::network::protocol::PromoteReplicaResponse =
+            bincode::deserialize(&response_payload)
+                .map_err(|e| RpcError::Deserialization(e.to_string()))?;
 
         Ok(response)
     }
@@ -300,13 +305,12 @@ impl RpcServer {
         handlers.insert(method.to_string(), handler);
     }
 
-
     /// Start the RPC server
     pub async fn start(&self) -> RpcResult<()> {
         let _listener = self
             .transport
             .listener()
-            .ok_or_else(|| RpcError::Transport(TransportError::ConnectionClosed))?;
+            .ok_or(RpcError::Transport(TransportError::ConnectionClosed))?;
 
         info!("RPC server started on {}", self.transport.local_addr());
 
@@ -320,7 +324,9 @@ impl RpcServer {
                     tokio::spawn(async move {
                         // Create a minimal server instance for handling the connection
                         // We only need handlers, membership, and raft, not the full transport
-                        if let Err(e) = Self::handle_connection_static(handlers, membership, raft, conn).await {
+                        if let Err(e) =
+                            Self::handle_connection_static(handlers, membership, raft, conn).await
+                        {
                             error!("Error handling connection: {}", e);
                         }
                     });
@@ -346,7 +352,15 @@ impl RpcServer {
 
             match msg {
                 Some(Message::RpcRequest(request)) => {
-                    if let Err(e) = Self::handle_request_static(handlers.clone(), membership.clone(), raft.clone(), request, &conn).await {
+                    if let Err(e) = Self::handle_request_static(
+                        handlers.clone(),
+                        membership.clone(),
+                        raft.clone(),
+                        request,
+                        &conn,
+                    )
+                    .await
+                    {
                         error!("Error handling request: {}", e);
                     }
                 }
@@ -415,7 +429,7 @@ impl RpcServer {
             )
         };
         let _guard = span.enter();
-        
+
         let handler = {
             let handlers_guard = handlers.lock().await;
             handlers_guard.get(&request.method).cloned()
@@ -466,16 +480,18 @@ impl RpcServer {
         if let Some(raft) = raft {
             match method {
                 "raft_request_vote" => {
-                    let args: crate::distributed::consensus::RequestVoteArgs = bincode::deserialize(payload)
-                        .map_err(|e| RpcError::Deserialization(e.to_string()))?;
+                    let args: crate::distributed::consensus::RequestVoteArgs =
+                        bincode::deserialize(payload)
+                            .map_err(|e| RpcError::Deserialization(e.to_string()))?;
                     let result = raft.handle_request_vote(args).await;
                     let response = bincode::serialize(&result)
                         .map_err(|e| RpcError::Serialization(e.to_string()))?;
                     return Ok(response);
                 }
                 "raft_append_entries" => {
-                    let args: crate::distributed::consensus::AppendEntriesArgs = bincode::deserialize(payload)
-                        .map_err(|e| RpcError::Deserialization(e.to_string()))?;
+                    let args: crate::distributed::consensus::AppendEntriesArgs =
+                        bincode::deserialize(payload)
+                            .map_err(|e| RpcError::Deserialization(e.to_string()))?;
                     let result = raft.handle_append_entries(args).await;
                     let response = bincode::serialize(&result)
                         .map_err(|e| RpcError::Serialization(e.to_string()))?;
@@ -516,21 +532,11 @@ impl RpcServer {
                     Err(RpcError::Rpc("Membership not available".to_string()))
                 }
             }
-            Some(RpcMethod::ExecuteOperator) => {
-                Self::handle_execute_operator(payload).await
-            }
-            Some(RpcMethod::ShuffleData) => {
-                Self::handle_shuffle_data(payload).await
-            }
-            Some(RpcMethod::ReplicateData) => {
-                Self::handle_replicate_data(payload).await
-            }
-            Some(RpcMethod::SyncReplica) => {
-                Self::handle_sync_replica(payload).await
-            }
-            Some(RpcMethod::PromoteReplica) => {
-                Self::handle_promote_replica(payload).await
-            }
+            Some(RpcMethod::ExecuteOperator) => Self::handle_execute_operator(payload).await,
+            Some(RpcMethod::ShuffleData) => Self::handle_shuffle_data(payload).await,
+            Some(RpcMethod::ReplicateData) => Self::handle_replicate_data(payload).await,
+            Some(RpcMethod::SyncReplica) => Self::handle_sync_replica(payload).await,
+            Some(RpcMethod::PromoteReplica) => Self::handle_promote_replica(payload).await,
             _ => Err(RpcError::MethodNotFound(method.to_string())),
         }
     }
@@ -539,9 +545,9 @@ impl RpcServer {
     async fn handle_execute_operator(payload: &[u8]) -> RpcResult<Vec<u8>> {
         use crate::network::protocol::ExecuteOperatorRequest;
         use crate::operators::{FilterOp, MapOp, StreamOperator};
-        
-        let request: ExecuteOperatorRequest = bincode::deserialize(payload)
-            .map_err(|e| RpcError::Deserialization(e.to_string()))?;
+
+        let request: ExecuteOperatorRequest =
+            bincode::deserialize(payload).map_err(|e| RpcError::Deserialization(e.to_string()))?;
 
         // Process events based on operator type
         // Note: This is a simplified implementation. In production, we'd need
@@ -573,25 +579,26 @@ impl RpcServer {
                 processed
             }
             _ => {
-                return Err(RpcError::Rpc(format!("Unknown operator type: {}", request.operator_type)));
+                return Err(RpcError::Rpc(format!(
+                    "Unknown operator type: {}",
+                    request.operator_type
+                )));
             }
         };
 
-        let response = crate::network::protocol::ExecuteOperatorResponse {
-            events: results,
-        };
-        
-        let payload = bincode::serialize(&response)
-            .map_err(|e| RpcError::Serialization(e.to_string()))?;
+        let response = crate::network::protocol::ExecuteOperatorResponse { events: results };
+
+        let payload =
+            bincode::serialize(&response).map_err(|e| RpcError::Serialization(e.to_string()))?;
         Ok(payload)
     }
 
     /// Handle shuffle data RPC
     async fn handle_shuffle_data(payload: &[u8]) -> RpcResult<Vec<u8>> {
         use crate::network::protocol::ShuffleDataRequest;
-        
-        let request: ShuffleDataRequest = bincode::deserialize(payload)
-            .map_err(|e| RpcError::Deserialization(e.to_string()))?;
+
+        let request: ShuffleDataRequest =
+            bincode::deserialize(payload).map_err(|e| RpcError::Deserialization(e.to_string()))?;
 
         debug!(
             "Received shuffle data: {} events for partition {}, operation: {}",
@@ -610,17 +617,17 @@ impl RpcServer {
             events_received: request.events.len(),
         };
 
-        let payload = bincode::serialize(&response)
-            .map_err(|e| RpcError::Serialization(e.to_string()))?;
+        let payload =
+            bincode::serialize(&response).map_err(|e| RpcError::Serialization(e.to_string()))?;
         Ok(payload)
     }
 
     /// Handle replicate data RPC (follower receives data from leader)
     async fn handle_replicate_data(payload: &[u8]) -> RpcResult<Vec<u8>> {
         use crate::network::protocol::{ReplicateDataRequest, ReplicateDataResponse};
-        
-        let request: ReplicateDataRequest = bincode::deserialize(payload)
-            .map_err(|e| RpcError::Deserialization(e.to_string()))?;
+
+        let request: ReplicateDataRequest =
+            bincode::deserialize(payload).map_err(|e| RpcError::Deserialization(e.to_string()))?;
 
         debug!(
             "Received replication data: {} events for partition {}, sequence: {}",
@@ -639,23 +646,22 @@ impl RpcServer {
             sequence: request.sequence,
             message: format!("Replicated {} events", request.events.len()),
         };
-        
-        let payload = bincode::serialize(&response)
-            .map_err(|e| RpcError::Serialization(e.to_string()))?;
+
+        let payload =
+            bincode::serialize(&response).map_err(|e| RpcError::Serialization(e.to_string()))?;
         Ok(payload)
     }
 
     /// Handle sync replica RPC (check replica sync status)
     async fn handle_sync_replica(payload: &[u8]) -> RpcResult<Vec<u8>> {
         use crate::network::protocol::{SyncReplicaRequest, SyncReplicaResponse};
-        
-        let request: SyncReplicaRequest = bincode::deserialize(payload)
-            .map_err(|e| RpcError::Deserialization(e.to_string()))?;
+
+        let request: SyncReplicaRequest =
+            bincode::deserialize(payload).map_err(|e| RpcError::Deserialization(e.to_string()))?;
 
         debug!(
             "Sync replica request for partition {}, current sequence: {}",
-            request.partition,
-            request.sequence
+            request.partition, request.sequence
         );
 
         // In a full implementation, we'd:
@@ -668,23 +674,22 @@ impl RpcServer {
             in_sync: true, // Simplified: always in sync
             last_sequence: request.sequence,
         };
-        
-        let payload = bincode::serialize(&response)
-            .map_err(|e| RpcError::Serialization(e.to_string()))?;
+
+        let payload =
+            bincode::serialize(&response).map_err(|e| RpcError::Serialization(e.to_string()))?;
         Ok(payload)
     }
 
     /// Handle promote replica RPC (promote follower to leader)
     async fn handle_promote_replica(payload: &[u8]) -> RpcResult<Vec<u8>> {
         use crate::network::protocol::{PromoteReplicaRequest, PromoteReplicaResponse};
-        
-        let request: PromoteReplicaRequest = bincode::deserialize(payload)
-            .map_err(|e| RpcError::Deserialization(e.to_string()))?;
+
+        let request: PromoteReplicaRequest =
+            bincode::deserialize(payload).map_err(|e| RpcError::Deserialization(e.to_string()))?;
 
         debug!(
             "Promote replica request for partition {}, new leader: {:?}",
-            request.partition,
-            request.new_leader
+            request.partition, request.new_leader
         );
 
         // In a full implementation, we'd:
@@ -696,9 +701,9 @@ impl RpcServer {
             success: true,
             message: format!("Promoted to leader for partition {}", request.partition),
         };
-        
-        let payload = bincode::serialize(&response)
-            .map_err(|e| RpcError::Serialization(e.to_string()))?;
+
+        let payload =
+            bincode::serialize(&response).map_err(|e| RpcError::Serialization(e.to_string()))?;
         Ok(payload)
     }
 
@@ -710,10 +715,10 @@ impl RpcServer {
             self.membership.clone(),
             self.raft.clone(),
             conn,
-        ).await
+        )
+        .await
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -746,7 +751,9 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         // Create client with separate transport (doesn't need listener)
-        let client_transport = Transport::bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
+        let client_transport = Transport::bind("127.0.0.1:0".parse().unwrap())
+            .await
+            .unwrap();
         let client = RpcClient::new(client_transport);
 
         // Join
@@ -783,7 +790,9 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         // Create client
-        let client_transport = Transport::bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
+        let client_transport = Transport::bind("127.0.0.1:0".parse().unwrap())
+            .await
+            .unwrap();
         let client = RpcClient::new(client_transport);
 
         // Get membership
@@ -814,11 +823,15 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         // Create client
-        let client_transport = Transport::bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
+        let client_transport = Transport::bind("127.0.0.1:0".parse().unwrap())
+            .await
+            .unwrap();
         let client = RpcClient::new(client_transport);
 
         // Call non-existent method
-        let result = client.call(server_addr, "nonexistent_method", Vec::new()).await;
+        let result = client
+            .call(server_addr, "nonexistent_method", Vec::new())
+            .await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -832,4 +845,3 @@ mod tests {
         server_handle.abort();
     }
 }
-

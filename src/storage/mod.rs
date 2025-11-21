@@ -2,11 +2,10 @@
 //!
 //! Provides append-only log, indexing, and compaction for durable storage
 
-pub mod log;
-pub mod index;
 pub mod compaction;
+pub mod index;
+pub mod log;
 
-pub use log::AppendOnlyLog;
-pub use index::LogIndex;
 pub use compaction::LogCompactor;
-
+pub use index::LogIndex;
+pub use log::{AppendOnlyLog, LogError, LogResult};

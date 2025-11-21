@@ -161,7 +161,10 @@ mod tests {
 
     #[test]
     fn test_trace_id_hex() {
-        let id = TraceId { high: 0x1234567890abcdef, low: 0xfedcba0987654321 };
+        let id = TraceId {
+            high: 0x1234567890abcdef,
+            low: 0xfedcba0987654321,
+        };
         let hex = id.to_hex();
         assert_eq!(hex.len(), 32);
         let parsed = TraceId::from_hex(&hex).unwrap();
@@ -188,7 +191,7 @@ mod tests {
     fn test_trace_context_child() {
         let parent = TraceContext::new();
         let child = parent.child();
-        
+
         assert_eq!(child.trace_id, parent.trace_id);
         assert_ne!(child.span_id, parent.span_id);
         assert_eq!(child.parent_span_id, Some(parent.span_id));
@@ -198,7 +201,9 @@ mod tests {
     fn test_trace_context_attributes() {
         let mut ctx = TraceContext::new();
         ctx.set_attribute("service".to_string(), "streamforge".to_string());
-        assert_eq!(ctx.get_attribute("service"), Some(&"streamforge".to_string()));
+        assert_eq!(
+            ctx.get_attribute("service"),
+            Some(&"streamforge".to_string())
+        );
     }
 }
-

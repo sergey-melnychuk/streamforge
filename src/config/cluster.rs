@@ -1,8 +1,6 @@
 //! Cluster configuration
 
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
-use std::time::Duration;
 
 /// Cluster configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,4 +108,3 @@ impl Default for RaftConfig {
         }
     }
 }
-

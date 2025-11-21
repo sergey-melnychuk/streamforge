@@ -11,15 +11,15 @@
 //! - TTL management
 
 pub mod backend;
-pub mod memory;
-pub mod rocksdb;
 pub mod checkpoint;
 pub mod idempotent;
+pub mod memory;
+pub mod rocksdb;
 pub mod ttl;
 
 pub use backend::{StateBackend, StateError, StateResult};
+pub use checkpoint::{CheckpointError, CheckpointManager, CheckpointMetadata, CheckpointResult};
+pub use idempotent::IdempotentStateBackend;
 pub use memory::MemoryStateBackend;
 pub use rocksdb::RocksDBStateBackend;
-pub use checkpoint::{CheckpointManager, CheckpointMetadata, CheckpointError, CheckpointResult};
-pub use idempotent::IdempotentStateBackend;
-pub use ttl::{TtlStateBackend, TtlConfig, CleanupPolicy};
+pub use ttl::{CleanupPolicy, TtlConfig, TtlStateBackend};

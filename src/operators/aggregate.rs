@@ -186,7 +186,9 @@ impl AggregateFunction for Min {
     fn add(&self, acc: &mut Self::Accumulator, event: &Event) -> Result<()> {
         let val = if let Some(v) = event.value.as_float() {
             Some(v)
-        } else { event.value.as_int().map(|v| v as f64) };
+        } else {
+            event.value.as_int().map(|v| v as f64)
+        };
 
         if let Some(v) = val {
             *acc = Some(acc.map_or(v, |current| current.min(v)));
@@ -234,7 +236,9 @@ impl AggregateFunction for Max {
     fn add(&self, acc: &mut Self::Accumulator, event: &Event) -> Result<()> {
         let val = if let Some(v) = event.value.as_float() {
             Some(v)
-        } else { event.value.as_int().map(|v| v as f64) };
+        } else {
+            event.value.as_int().map(|v| v as f64)
+        };
 
         if let Some(v) = val {
             *acc = Some(acc.map_or(v, |current| current.max(v)));

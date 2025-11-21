@@ -3,7 +3,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tracing::debug;
 
 /// Collects metrics about stream processing performance
 pub struct MetricsCollector {
@@ -42,7 +41,8 @@ impl MetricsCollector {
     /// Record an event being processed
     pub fn record_event(&self, bytes: usize) {
         self.events_processed.fetch_add(1, Ordering::Relaxed);
-        self.bytes_processed.fetch_add(bytes as u64, Ordering::Relaxed);
+        self.bytes_processed
+            .fetch_add(bytes as u64, Ordering::Relaxed);
         self.update_rate();
     }
 
@@ -75,7 +75,7 @@ impl MetricsCollector {
         let events_processed = self.events_processed.load(Ordering::Relaxed);
         let events_per_second = self.events_per_second.load(Ordering::Relaxed);
         let bytes_processed = self.bytes_processed.load(Ordering::Relaxed);
-        
+
         let latency_sum = self.latency_sum.load(Ordering::Relaxed);
         let latency_count = self.latency_count.load(Ordering::Relaxed);
         let avg_latency_us = if latency_count > 0 {
@@ -140,11 +140,16 @@ impl MetricsSnapshot {
              # HELP streamforge_uptime_seconds Uptime in seconds\n\
              # TYPE streamforge_uptime_seconds gauge\n\
              streamforge_uptime_seconds{{collector=\"{}\"}} {}\n",
-            self.name, self.events_processed,
-            self.name, self.events_per_second,
-            self.name, self.bytes_processed,
-            self.name, self.avg_latency_us,
-            self.name, self.uptime_seconds,
+            self.name,
+            self.events_processed,
+            self.name,
+            self.events_per_second,
+            self.name,
+            self.bytes_processed,
+            self.name,
+            self.avg_latency_us,
+            self.name,
+            self.uptime_seconds,
         )
     }
 
@@ -175,13 +180,12 @@ impl serde::Serialize for MetricsSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread;
     use std::time::Duration;
 
     #[test]
     fn test_metrics_collection() {
         let collector = MetricsCollector::new("test");
-        
+
         collector.record_event(100);
         collector.record_event(200);
         collector.record_latency(Duration::from_micros(50));
@@ -196,10 +200,10 @@ mod tests {
     #[test]
     fn test_metrics_reset() {
         let collector = MetricsCollector::new("test");
-        
+
         collector.record_event(100);
         collector.reset();
-        
+
         let snapshot = collector.snapshot();
         assert_eq!(snapshot.events_processed, 0);
     }

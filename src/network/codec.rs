@@ -34,14 +34,12 @@ impl Codec {
 
     /// Serialize a message to bytes
     pub fn encode_message(msg: &Message) -> Result<Vec<u8>, CodecError> {
-        bincode::serialize(msg)
-            .map_err(|e| CodecError::Serialization(e.to_string()))
+        bincode::serialize(msg).map_err(|e| CodecError::Serialization(e.to_string()))
     }
 
     /// Deserialize a message from bytes
     pub fn decode_message(bytes: &[u8]) -> Result<Message, CodecError> {
-        bincode::deserialize(bytes)
-            .map_err(|e| CodecError::Deserialization(e.to_string()))
+        bincode::deserialize(bytes).map_err(|e| CodecError::Deserialization(e.to_string()))
     }
 }
 
@@ -111,8 +109,8 @@ impl Decoder for Codec {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::distributed::node::{NodeId, NodeMetadata};
     use crate::distributed::discovery::GossipMessage;
+    use crate::distributed::node::{NodeId, NodeMetadata};
     use std::net::SocketAddr;
 
     fn create_test_node(id: u64, port: u16) -> NodeMetadata {
@@ -124,16 +122,22 @@ mod tests {
     #[test]
     fn test_encode_decode_gossip() {
         let node = create_test_node(1, 8080);
-        let msg = Message::gossip(
-            NodeId::new(1),
-            GossipMessage::Join { node: node.clone() },
-        );
+        let msg = Message::gossip(NodeId::new(1), GossipMessage::Join { node: node.clone() });
 
         let encoded = Codec::encode_message(&msg).unwrap();
         let decoded = Codec::decode_message(&encoded).unwrap();
 
         match (msg, decoded) {
-            (Message::Gossip { from: f1, content: c1 }, Message::Gossip { from: f2, content: c2 }) => {
+            (
+                Message::Gossip {
+                    from: f1,
+                    content: c1,
+                },
+                Message::Gossip {
+                    from: f2,
+                    content: c2,
+                },
+            ) => {
                 assert_eq!(f1, f2);
                 match (c1, c2) {
                     (GossipMessage::Join { node: n1 }, GossipMessage::Join { node: n2 }) => {
@@ -152,10 +156,12 @@ mod tests {
         let mut codec = Codec::new();
         let mut buffer = BytesMut::new();
 
-        let node = create_test_node(1, 8080);
+        let _node = create_test_node(1, 8080);
         let msg = Message::gossip(
             NodeId::new(1),
-            GossipMessage::Heartbeat { node_id: NodeId::new(2) },
+            GossipMessage::Heartbeat {
+                node_id: NodeId::new(2),
+            },
         );
 
         // Encode
@@ -165,10 +171,22 @@ mod tests {
         let decoded = codec.decode(&mut buffer).unwrap().unwrap();
 
         match (msg, decoded) {
-            (Message::Gossip { from: f1, content: c1 }, Message::Gossip { from: f2, content: c2 }) => {
+            (
+                Message::Gossip {
+                    from: f1,
+                    content: c1,
+                },
+                Message::Gossip {
+                    from: f2,
+                    content: c2,
+                },
+            ) => {
                 assert_eq!(f1, f2);
                 match (c1, c2) {
-                    (GossipMessage::Heartbeat { node_id: n1 }, GossipMessage::Heartbeat { node_id: n2 }) => {
+                    (
+                        GossipMessage::Heartbeat { node_id: n1 },
+                        GossipMessage::Heartbeat { node_id: n2 },
+                    ) => {
                         assert_eq!(n1, n2);
                     }
                     _ => panic!("Message type mismatch"),
@@ -184,10 +202,7 @@ mod tests {
         let mut buffer = BytesMut::new();
 
         let node = create_test_node(1, 8080);
-        let msg = Message::gossip(
-            NodeId::new(1),
-            GossipMessage::Join { node },
-        );
+        let msg = Message::gossip(NodeId::new(1), GossipMessage::Join { node });
 
         // Encode
         codec.encode(msg, &mut buffer).unwrap();
@@ -202,4 +217,3 @@ mod tests {
         assert!(decoded.is_some());
     }
 }
-

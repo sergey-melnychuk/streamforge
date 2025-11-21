@@ -69,27 +69,24 @@ pub enum Expression {
         right: Box<Expression>,
     },
     /// Function call
-    FunctionCall {
-        name: String,
-        args: Vec<Expression>,
-    },
+    FunctionCall { name: String, args: Vec<Expression> },
 }
 
 /// Binary operators
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOperator {
-    Eq,      // =
-    Ne,      // !=
-    Lt,      // <
-    Le,      // <=
-    Gt,      // >
-    Ge,      // >=
-    And,     // AND
-    Or,      // OR
-    Add,     // +
-    Sub,     // -
-    Mul,     // *
-    Div,     // /
+    Eq,  // =
+    Ne,  // !=
+    Lt,  // <
+    Le,  // <=
+    Gt,  // >
+    Ge,  // >=
+    And, // AND
+    Or,  // OR
+    Add, // +
+    Sub, // -
+    Mul, // *
+    Div, // /
 }
 
 /// Value types
@@ -207,18 +204,18 @@ impl Expression {
                 match &event.value {
                     crate::core::event::EventValue::Json(json) => {
                         json.get(name)
-                            .and_then(|v| {
+                            .map(|v| {
                                 // Try to convert to Value
                                 if let Some(s) = v.as_str() {
-                                    Some(Value::String(s.to_string()))
+                                    Value::String(s.to_string())
                                 } else if let Some(i) = v.as_i64() {
-                                    Some(Value::Integer(i))
+                                    Value::Integer(i)
                                 } else if let Some(f) = v.as_f64() {
-                                    Some(Value::Float(f))
+                                    Value::Float(f)
                                 } else if let Some(b) = v.as_bool() {
-                                    Some(Value::Boolean(b))
+                                    Value::Boolean(b)
                                 } else {
-                                    Some(Value::Null)
+                                    Value::Null
                                 }
                             })
                             .unwrap_or(Value::Null)
@@ -244,86 +241,66 @@ fn evaluate_binary_op(left: &Value, op: BinaryOperator, right: &Value) -> Value 
     match op {
         BinaryOperator::Eq => Value::Boolean(left == right),
         BinaryOperator::Ne => Value::Boolean(left != right),
-        BinaryOperator::Lt => {
-            match (left, right) {
-                (Value::Integer(l), Value::Integer(r)) => Value::Boolean(l < r),
-                (Value::Float(l), Value::Float(r)) => Value::Boolean(l < r),
-                _ => Value::Boolean(false),
-            }
-        }
-        BinaryOperator::Le => {
-            match (left, right) {
-                (Value::Integer(l), Value::Integer(r)) => Value::Boolean(l <= r),
-                (Value::Float(l), Value::Float(r)) => Value::Boolean(l <= r),
-                _ => Value::Boolean(false),
-            }
-        }
-        BinaryOperator::Gt => {
-            match (left, right) {
-                (Value::Integer(l), Value::Integer(r)) => Value::Boolean(l > r),
-                (Value::Float(l), Value::Float(r)) => Value::Boolean(l > r),
-                _ => Value::Boolean(false),
-            }
-        }
-        BinaryOperator::Ge => {
-            match (left, right) {
-                (Value::Integer(l), Value::Integer(r)) => Value::Boolean(l >= r),
-                (Value::Float(l), Value::Float(r)) => Value::Boolean(l >= r),
-                _ => Value::Boolean(false),
-            }
-        }
-        BinaryOperator::And => {
-            match (left, right) {
-                (Value::Boolean(l), Value::Boolean(r)) => Value::Boolean(*l && *r),
-                _ => Value::Boolean(false),
-            }
-        }
-        BinaryOperator::Or => {
-            match (left, right) {
-                (Value::Boolean(l), Value::Boolean(r)) => Value::Boolean(*l || *r),
-                _ => Value::Boolean(false),
-            }
-        }
-        BinaryOperator::Add => {
-            match (left, right) {
-                (Value::Integer(l), Value::Integer(r)) => Value::Integer(l + r),
-                (Value::Float(l), Value::Float(r)) => Value::Float(l + r),
-                _ => Value::Null,
-            }
-        }
-        BinaryOperator::Sub => {
-            match (left, right) {
-                (Value::Integer(l), Value::Integer(r)) => Value::Integer(l - r),
-                (Value::Float(l), Value::Float(r)) => Value::Float(l - r),
-                _ => Value::Null,
-            }
-        }
-        BinaryOperator::Mul => {
-            match (left, right) {
-                (Value::Integer(l), Value::Integer(r)) => Value::Integer(l * r),
-                (Value::Float(l), Value::Float(r)) => Value::Float(l * r),
-                _ => Value::Null,
-            }
-        }
-        BinaryOperator::Div => {
-            match (left, right) {
-                (Value::Integer(l), Value::Integer(r)) => {
-                    if *r == 0 {
-                        Value::Null
-                    } else {
-                        Value::Integer(l / r)
-                    }
+        BinaryOperator::Lt => match (left, right) {
+            (Value::Integer(l), Value::Integer(r)) => Value::Boolean(l < r),
+            (Value::Float(l), Value::Float(r)) => Value::Boolean(l < r),
+            _ => Value::Boolean(false),
+        },
+        BinaryOperator::Le => match (left, right) {
+            (Value::Integer(l), Value::Integer(r)) => Value::Boolean(l <= r),
+            (Value::Float(l), Value::Float(r)) => Value::Boolean(l <= r),
+            _ => Value::Boolean(false),
+        },
+        BinaryOperator::Gt => match (left, right) {
+            (Value::Integer(l), Value::Integer(r)) => Value::Boolean(l > r),
+            (Value::Float(l), Value::Float(r)) => Value::Boolean(l > r),
+            _ => Value::Boolean(false),
+        },
+        BinaryOperator::Ge => match (left, right) {
+            (Value::Integer(l), Value::Integer(r)) => Value::Boolean(l >= r),
+            (Value::Float(l), Value::Float(r)) => Value::Boolean(l >= r),
+            _ => Value::Boolean(false),
+        },
+        BinaryOperator::And => match (left, right) {
+            (Value::Boolean(l), Value::Boolean(r)) => Value::Boolean(*l && *r),
+            _ => Value::Boolean(false),
+        },
+        BinaryOperator::Or => match (left, right) {
+            (Value::Boolean(l), Value::Boolean(r)) => Value::Boolean(*l || *r),
+            _ => Value::Boolean(false),
+        },
+        BinaryOperator::Add => match (left, right) {
+            (Value::Integer(l), Value::Integer(r)) => Value::Integer(l + r),
+            (Value::Float(l), Value::Float(r)) => Value::Float(l + r),
+            _ => Value::Null,
+        },
+        BinaryOperator::Sub => match (left, right) {
+            (Value::Integer(l), Value::Integer(r)) => Value::Integer(l - r),
+            (Value::Float(l), Value::Float(r)) => Value::Float(l - r),
+            _ => Value::Null,
+        },
+        BinaryOperator::Mul => match (left, right) {
+            (Value::Integer(l), Value::Integer(r)) => Value::Integer(l * r),
+            (Value::Float(l), Value::Float(r)) => Value::Float(l * r),
+            _ => Value::Null,
+        },
+        BinaryOperator::Div => match (left, right) {
+            (Value::Integer(l), Value::Integer(r)) => {
+                if *r == 0 {
+                    Value::Null
+                } else {
+                    Value::Integer(l / r)
                 }
-                (Value::Float(l), Value::Float(r)) => {
-                    if *r == 0.0 {
-                        Value::Null
-                    } else {
-                        Value::Float(l / r)
-                    }
-                }
-                _ => Value::Null,
             }
-        }
+            (Value::Float(l), Value::Float(r)) => {
+                if *r == 0.0 {
+                    Value::Null
+                } else {
+                    Value::Float(l / r)
+                }
+            }
+            _ => Value::Null,
+        },
     }
 }
 
@@ -359,4 +336,3 @@ mod tests {
         assert_eq!(expr.evaluate(&event), Value::Boolean(true));
     }
 }
-

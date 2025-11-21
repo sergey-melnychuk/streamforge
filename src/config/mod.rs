@@ -4,16 +4,15 @@
 
 pub mod builder;
 pub mod cluster;
-pub mod state;
 pub mod network;
+pub mod state;
 
 pub use builder::ConfigBuilder;
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 /// Main configuration for StreamForge
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
     /// Stream processing configuration
     pub processing: ProcessingConfig,
@@ -72,18 +71,6 @@ impl Default for MetricsConfig {
     }
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            processing: ProcessingConfig::default(),
-            cluster: cluster::ClusterConfig::default(),
-            state: state::StateConfig::default(),
-            network: network::NetworkConfig::default(),
-            metrics: MetricsConfig::default(),
-        }
-    }
-}
-
 impl Config {
     /// Load configuration from file
     pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, ConfigError> {
@@ -104,7 +91,7 @@ impl Config {
     /// Load from environment variables
     pub fn from_env() -> Self {
         let mut config = Config::default();
-        
+
         if let Ok(parallelism) = std::env::var("STREAMFORGE_PARALLELISM") {
             if let Ok(p) = parallelism.parse() {
                 config.processing.parallelism = p;

@@ -15,8 +15,7 @@ use std::sync::Arc;
 pub type Timestamp = i64;
 
 /// Event key used for partitioning and joins
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Default)]
 pub enum EventKey {
     /// No key (null key)
     #[default]
@@ -32,6 +31,7 @@ pub enum EventKey {
 }
 
 impl EventKey {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: impl Into<String>) -> Self {
         EventKey::String(s.into().into())
     }
@@ -53,14 +53,14 @@ impl EventKey {
 mod serde_str {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use std::sync::Arc;
-    
+
     pub fn serialize<S>(s: &Arc<str>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         s.as_ref().serialize(serializer)
     }
-    
+
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Arc<str>, D::Error>
     where
         D: Deserializer<'de>,
@@ -73,14 +73,14 @@ mod serde_str {
 mod serde_bytes {
     use bytes::Bytes;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    
+
     pub fn serialize<S>(b: &Bytes, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         b.as_ref().serialize(serializer)
     }
-    
+
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Bytes, D::Error>
     where
         D: Deserializer<'de>,
@@ -102,8 +102,7 @@ impl fmt::Display for EventKey {
 }
 
 /// Event value payload
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Default)]
 pub enum EventValue {
     /// Null value
     #[default]
@@ -125,6 +124,7 @@ pub enum EventValue {
 }
 
 impl EventValue {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: impl Into<String>) -> Self {
         EventValue::String(s.into().into())
     }
@@ -176,7 +176,6 @@ impl EventValue {
         }
     }
 }
-
 
 impl fmt::Display for EventValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -335,11 +334,7 @@ mod tests {
 
     #[test]
     fn test_event_creation() {
-        let event = Event::new(
-            EventKey::from_str("key1"),
-            EventValue::from_int(42),
-            1000,
-        );
+        let event = Event::new(EventKey::from_str("key1"), EventValue::from_int(42), 1000);
 
         assert_eq!(event.key, EventKey::String("key1".into()));
         assert_eq!(event.value, EventValue::Int(42));

@@ -4,8 +4,8 @@
 //!
 //! Run with: cargo run --example config_example
 
-use streamforge::config::{Config, ConfigBuilder};
 use std::path::PathBuf;
+use streamforge::config::{Config, ConfigBuilder};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("╔══════════════════════════════════════════════════════════════╗");
@@ -19,7 +19,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let default_config = Config::default();
     println!("   Parallelism: {}", default_config.processing.parallelism);
     println!("   Buffer size: {}", default_config.processing.buffer_size);
-    println!("   Backpressure: {}", default_config.processing.backpressure_enabled);
+    println!(
+        "   Backpressure: {}",
+        default_config.processing.backpressure_enabled
+    );
     println!();
 
     // ========================================================================
@@ -56,20 +59,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::env::set_var("STREAMFORGE_PARALLELISM", "16");
     std::env::set_var("STREAMFORGE_BUFFER_SIZE", "4096");
     let env_config = Config::from_env();
-    println!("   Parallelism (from env): {}", env_config.processing.parallelism);
-    println!("   Buffer size (from env): {}", env_config.processing.buffer_size);
+    println!(
+        "   Parallelism (from env): {}",
+        env_config.processing.parallelism
+    );
+    println!(
+        "   Buffer size (from env): {}",
+        env_config.processing.buffer_size
+    );
     println!();
 
     // ========================================================================
     // Method 4: From TOML file
     // ========================================================================
     println!("📄 Method 4: TOML Configuration File\n");
-    
+
     // Create a sample config file
     let config_file = "streamforge.toml";
     custom_config.to_file(config_file)?;
     println!("   ✓ Created config file: {}", config_file);
-    
+
     // Load from file
     let loaded_config = Config::from_file(config_file)?;
     println!("   ✓ Loaded config from file");
@@ -88,4 +97,3 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-

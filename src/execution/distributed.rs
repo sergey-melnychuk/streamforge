@@ -4,8 +4,8 @@
 
 use crate::core::{Event, EventKey};
 use crate::distributed::{
-    node::{NodeId, NodeMetadata},
-    partition_assignment::{PartitionAssigner, ConsistentHashAssigner},
+    node::NodeId,
+    partition_assignment::{ConsistentHashAssigner, PartitionAssigner},
     replication::ReplicationManager,
     ClusterMembership,
 };
@@ -15,13 +15,12 @@ use crate::network::{
     RpcClient,
 };
 use crate::operators::StreamOperator;
-use crate::tracing::context::TraceContext;
-use crate::tracing::instrumentation::{current_context, with_trace_context, TraceInstrumentation};
+use crate::tracing::instrumentation::{current_context, TraceInstrumentation};
 use bincode;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::{debug, info, warn, span, Level};
+use tracing::{debug, info, warn};
 
 /// Distributed execution context
 pub struct DistributedContext {
@@ -46,8 +45,9 @@ impl DistributedContext {
         membership: Arc<ClusterMembership>,
         num_partitions: u32,
     ) -> Self {
-        let partition_assigner: Arc<dyn PartitionAssigner> = Arc::new(ConsistentHashAssigner::default());
-        
+        let partition_assigner: Arc<dyn PartitionAssigner> =
+            Arc::new(ConsistentHashAssigner::default());
+
         Self {
             local_node_id,
             membership,
@@ -79,15 +79,16 @@ impl DistributedContext {
     pub async fn update_partition_assignment(&self) -> Result<()> {
         let nodes = self.membership.get_alive_nodes();
         let old_assignment = self.partition_assignment.read().await.clone();
-        
+
         let new_assignment = if old_assignment.is_empty() {
             self.partition_assigner.assign(self.num_partitions, &nodes)
         } else {
-            self.partition_assigner.rebalance(self.num_partitions, &old_assignment, &nodes)
+            self.partition_assigner
+                .rebalance(self.num_partitions, &old_assignment, &nodes)
         };
 
         *self.partition_assignment.write().await = new_assignment.clone();
-        
+
         info!(
             "Updated partition assignment: {} partitions across {} nodes",
             self.num_partitions,
@@ -117,12 +118,17 @@ impl DistributedContext {
 
         // Fallback to partition assignment
         let assignment = self.partition_assignment.read().await;
-        self.partition_assigner.get_node_for_partition(partition, &assignment)
+        self.partition_assigner
+            .get_node_for_partition(partition, &assignment)
     }
 
     /// Get a replica node for a partition (for reads)
     /// If read replicas are enabled, returns a follower; otherwise returns the leader
-    pub async fn get_replica_for_partition(&self, partition: u32, prefer_read_replica: bool) -> Option<NodeId> {
+    pub async fn get_replica_for_partition(
+        &self,
+        partition: u32,
+        prefer_read_replica: bool,
+    ) -> Option<NodeId> {
         if prefer_read_replica {
             if let Some(rm) = &self.replication_manager {
                 let followers = rm.get_followers(partition).await;
@@ -212,20 +218,21 @@ impl DistributedExecutor {
         O: StreamOperator + Send + 'static,
     {
         // Create or get trace context
-        let trace_ctx = current_context().unwrap_or_else(|| TraceContext::new());
-        let (span, child_ctx) = TraceInstrumentation::start_span("execute_operator", Some(&trace_ctx));
+        let trace_ctx = current_context().unwrap_or_default();
+        let (span, _child_ctx) =
+            TraceInstrumentation::start_span("execute_operator", Some(&trace_ctx));
         let _guard = span.enter();
-        
+
         span.record("operator_type", self.get_operator_type(&operator).as_str());
         span.record("event_count", events.len() as u64);
-        
+
         let mut local_events = Vec::new();
         let mut remote_events: HashMap<NodeId, Vec<Event>> = HashMap::new();
 
         // Partition events by destination node (route to leaders for writes)
         for event in events {
             let partition = self.context.get_partition_for_event(&event);
-            
+
             // Check if we're the leader for this partition
             if self.context.is_leader(partition).await {
                 // Process locally (we're the leader)
@@ -238,16 +245,21 @@ impl DistributedExecutor {
                     if let Some(rm) = self.context.replication_manager() {
                         let followers = rm.get_followers(partition).await;
                         for follower_id in followers {
-                            if let Some(follower_addr) = self.context.membership.get_node_address(follower_id) {
+                            if let Some(follower_addr) =
+                                self.context.membership.get_node_address(follower_id)
+                            {
                                 // Replicate the event to follower
                                 // In a full implementation, we'd track sequence numbers
                                 let sequence = 0; // TODO: Track sequence numbers
-                                if let Err(e) = rpc_client.replicate_data(
-                                    follower_addr,
-                                    partition,
-                                    sequence,
-                                    vec![event.clone()],
-                                ).await {
+                                if let Err(e) = rpc_client
+                                    .replicate_data(
+                                        follower_addr,
+                                        partition,
+                                        sequence,
+                                        vec![event.clone()],
+                                    )
+                                    .await
+                                {
                                     warn!("Failed to replicate to follower {}: {}", follower_id, e);
                                 }
                             }
@@ -257,7 +269,7 @@ impl DistributedExecutor {
             } else {
                 // Route to leader (remote node)
                 if let Some(node_id) = self.context.get_node_for_partition(partition).await {
-                    remote_events.entry(node_id).or_insert_with(Vec::new).push(event);
+                    remote_events.entry(node_id).or_default().push(event);
                 } else {
                     warn!("No node found for partition {}, dropping event", partition);
                 }
@@ -267,31 +279,39 @@ impl DistributedExecutor {
         // Send remote_events to their destination nodes via RPC
         let remote_count: usize = remote_events.values().map(|v| v.len()).sum();
         let mut remote_results = Vec::new();
-        
+
         if let Some(rpc_client) = &self.rpc_client {
             for (node_id, events) in remote_events {
                 if let Some(node_addr) = self.context.membership.get_node_address(node_id) {
                     // For now, we'll use a simple operator type identifier
                     // In a full implementation, we'd serialize the operator configuration
                     let operator_type = self.get_operator_type(&operator);
-                    
+
                     let request = ExecuteOperatorRequest {
                         operator_type,
                         operator_config: Vec::new(), // TODO: Serialize operator config
                         events: events.clone(),
                     };
-                    
-                    let payload = bincode::serialize(&request)
-                        .map_err(|e| crate::error::StreamError::SerializationError(e.to_string()))?;
-                    
-                    match rpc_client.call(node_addr, RpcMethod::ExecuteOperator.as_str(), payload).await {
+
+                    let payload = bincode::serialize(&request).map_err(|e| {
+                        crate::error::StreamError::SerializationError(e.to_string())
+                    })?;
+
+                    match rpc_client
+                        .call(node_addr, RpcMethod::ExecuteOperator.as_str(), payload)
+                        .await
+                    {
                         Ok(response_payload) => {
-                            match bincode::deserialize::<ExecuteOperatorResponse>(&response_payload) {
+                            match bincode::deserialize::<ExecuteOperatorResponse>(&response_payload)
+                            {
                                 Ok(response) => {
                                     remote_results.extend(response.events);
                                 }
                                 Err(e) => {
-                                    warn!("Failed to deserialize operator response from {}: {}", node_id, e);
+                                    warn!(
+                                        "Failed to deserialize operator response from {}: {}",
+                                        node_id, e
+                                    );
                                 }
                             }
                         }
@@ -300,13 +320,20 @@ impl DistributedExecutor {
                         }
                     }
                 } else {
-                    warn!("No address found for node {}, dropping {} events", node_id, events.len());
+                    warn!(
+                        "No address found for node {}, dropping {} events",
+                        node_id,
+                        events.len()
+                    );
                 }
             }
-            
+
             local_events.extend(remote_results);
         } else {
-            warn!("No RPC client available, dropping {} remote events", remote_count);
+            warn!(
+                "No RPC client available, dropping {} remote events",
+                remote_count
+            );
         }
 
         debug!(
@@ -351,7 +378,7 @@ impl DistributedExecutor {
 
                 if batch.len() >= BATCH_SIZE {
                     let partition = context.get_partition_for_event(&batch[0]);
-                    
+
                     if context.is_local_partition(partition).await {
                         // Process batch locally
                         let batch_to_process = std::mem::take(&mut batch);
@@ -371,7 +398,7 @@ impl DistributedExecutor {
             // Process remaining events
             if !batch.is_empty() {
                 let partition = context.get_partition_for_event(&batch[0]);
-                
+
                 if context.is_local_partition(partition).await {
                     if let Ok(results) = op.process_batch(batch) {
                         for result in results {
@@ -389,29 +416,28 @@ impl DistributedExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::operators::FilterOp;
-    use std::net::SocketAddr;
+    use crate::distributed::node::NodeMetadata;
 
     #[tokio::test]
     async fn test_distributed_context() {
         let node_id = NodeId::generate();
         let membership = Arc::new(ClusterMembership::new(node_id, 30));
-        
+
         // Add local node to membership
         let local_node = NodeMetadata::new(node_id, "127.0.0.1:8000".parse().unwrap());
         membership.add_node(local_node);
-        
+
         let context = DistributedContext::new(node_id, membership.clone(), 10);
-        
+
         // Add some other nodes
         let node1 = NodeMetadata::new(NodeId::new(1), "127.0.0.1:8001".parse().unwrap());
         let node2 = NodeMetadata::new(NodeId::new(2), "127.0.0.1:8002".parse().unwrap());
-        
+
         membership.add_node(node1);
         membership.add_node(node2);
-        
+
         context.update_partition_assignment().await.unwrap();
-        
+
         let local_partitions = context.get_local_partitions().await;
         assert!(!local_partitions.is_empty());
     }
@@ -421,15 +447,14 @@ mod tests {
         let node_id = NodeId::generate();
         let membership = Arc::new(ClusterMembership::new(node_id, 30));
         let context = DistributedContext::new(node_id, membership, 10);
-        
+
         let event = Event::new(
             EventKey::from_str("test-key"),
             crate::core::EventValue::String("value".into()),
             1234567890,
         );
-        
+
         let partition = context.get_partition_for_event(&event);
         assert!(partition < 10);
     }
 }
-

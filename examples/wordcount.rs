@@ -3,7 +3,7 @@
 //! Run with: cargo run --example wordcount
 
 use std::collections::HashMap;
-use streamforge::core::{Event, EventKey, EventValue};
+use streamforge::core::{Event, EventValue};
 use streamforge::execution::Stream;
 
 #[tokio::main]

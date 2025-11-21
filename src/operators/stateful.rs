@@ -52,8 +52,8 @@ impl OperatorState {
     /// List all keys in this operator's namespace
     pub async fn list_keys(&self) -> StateResult<Vec<Vec<u8>>> {
         let prefix = format!("{}:", self.namespace);
-        let all_keys = self.backend.list_keys(&prefix.as_bytes()).await?;
-        
+        let all_keys = self.backend.list_keys(prefix.as_bytes()).await?;
+
         Ok(all_keys
             .into_iter()
             .filter_map(|k| {
@@ -78,6 +78,12 @@ impl OperatorState {
 /// Example stateful operator: Count operator that maintains counts per key
 pub struct CountOperator {
     state: Option<OperatorState>,
+}
+
+impl Default for CountOperator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CountOperator {
@@ -154,4 +160,3 @@ mod tests {
         assert!(result.is_some());
     }
 }
-

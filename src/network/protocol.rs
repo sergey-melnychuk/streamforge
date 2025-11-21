@@ -2,8 +2,8 @@
 //!
 //! Defines message types and RPC protocol for distributed coordination
 
-use crate::distributed::node::NodeId;
 use crate::distributed::discovery::GossipMessage;
+use crate::distributed::node::NodeId;
 use crate::distributed::node::NodeMetadata;
 use crate::tracing::context::TraceContext;
 use serde::{Deserialize, Serialize};
@@ -156,6 +156,7 @@ impl RpcMethod {
     }
 
     /// Parse method name
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "join" => Some(RpcMethod::Join),
@@ -296,4 +297,3 @@ pub struct PromoteReplicaResponse {
     pub success: bool,
     pub message: String,
 }
-

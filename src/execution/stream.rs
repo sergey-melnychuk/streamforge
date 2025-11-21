@@ -3,9 +3,10 @@
 use crate::core::{Event, EventKey, EventValue};
 use crate::error::Result;
 use crate::execution::{JoinBuilder, WindowedStream};
-use crate::operators::{FilterOp, FlatMapOp, FlatMapOperator, MapOp, StreamOperator, WindowAssigner};
+use crate::operators::{
+    FilterOp, FlatMapOp, FlatMapOperator, MapOp, StreamOperator, WindowAssigner,
+};
 use futures::stream::{self, StreamExt};
-use futures::FutureExt;
 use std::pin::Pin;
 use tokio::sync::mpsc;
 
@@ -18,6 +19,7 @@ pub struct Stream {
 
 impl Stream {
     /// Create a stream from an iterator of events
+    #[allow(clippy::should_implement_trait)]
     pub fn from_iter<I>(iter: I) -> Self
     where
         I: IntoIterator<Item = Event> + Send + 'static,
@@ -171,17 +173,17 @@ impl Stream {
     {
         use futures::StreamExt;
         let mut stream = self.inner;
-        
+
         while let Some(event) = stream.next().await {
             sink.write(event)
                 .await
                 .map_err(|e| crate::error::StreamError::Unknown(format!("Sink error: {}", e)))?;
         }
-        
+
         sink.close()
             .await
             .map_err(|e| crate::error::StreamError::Unknown(format!("Sink close error: {}", e)))?;
-        
+
         Ok(())
     }
 
@@ -264,8 +266,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_stream_filter() {
-        let stream = Stream::from_values(vec![1, 2, 3, 4, 5])
-            .filter(|e| e.value.as_int().unwrap_or(0) > 2);
+        let stream =
+            Stream::from_values(vec![1, 2, 3, 4, 5]).filter(|e| e.value.as_int().unwrap_or(0) > 2);
 
         let events = stream.collect().await.unwrap();
         assert_eq!(events.len(), 3);
@@ -276,11 +278,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_stream_map() {
-        let stream = Stream::from_values(vec![1, 2, 3])
-            .map(|e| {
-                let val = e.value.as_int().unwrap_or(0) * 2;
-                e.with_value_changed(EventValue::from_int(val))
-            });
+        let stream = Stream::from_values(vec![1, 2, 3]).map(|e| {
+            let val = e.value.as_int().unwrap_or(0) * 2;
+            e.with_value_changed(EventValue::from_int(val))
+        });
 
         let events = stream.collect().await.unwrap();
         assert_eq!(events[0].value.as_int(), Some(2));
@@ -290,13 +291,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_stream_flatmap() {
-        let stream = Stream::from_values(vec![2, 3])
-            .flat_map(|e| {
-                let n = e.value.as_int().unwrap_or(0);
-                (0..n)
-                    .map(|i| Event::with_value(EventValue::from_int(i)))
-                    .collect()
-            });
+        let stream = Stream::from_values(vec![2, 3]).flat_map(|e| {
+            let n = e.value.as_int().unwrap_or(0);
+            (0..n)
+                .map(|i| Event::with_value(EventValue::from_int(i)))
+                .collect()
+        });
 
         let events = stream.collect().await.unwrap();
         assert_eq!(events.len(), 5); // 2 + 3 = 5 events
@@ -338,11 +338,17 @@ mod tests {
     #[tokio::test]
     async fn test_stream_any_all() {
         let stream = Stream::from_values(vec![2, 4, 6]);
-        let has_even = stream.any(|e| e.value.as_int().unwrap_or(0) % 2 == 0).await.unwrap();
+        let has_even = stream
+            .any(|e| e.value.as_int().unwrap_or(0) % 2 == 0)
+            .await
+            .unwrap();
         assert!(has_even);
 
         let stream = Stream::from_values(vec![2, 4, 6]);
-        let all_even = stream.all(|e| e.value.as_int().unwrap_or(0) % 2 == 0).await.unwrap();
+        let all_even = stream
+            .all(|e| e.value.as_int().unwrap_or(0) % 2 == 0)
+            .await
+            .unwrap();
         assert!(all_even);
     }
 

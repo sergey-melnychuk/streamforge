@@ -1,13 +1,10 @@
 //! Trace instrumentation helpers
 
-use crate::tracing::context::{TraceContext, TraceId, SpanId};
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use crate::tracing::context::TraceContext;
 use tracing::{span, Level, Span};
 
-/// Thread-local trace context storage
 thread_local! {
-    static CURRENT_CONTEXT: std::cell::RefCell<Option<TraceContext>> = std::cell::RefCell::new(None);
+    static CURRENT_CONTEXT: std::cell::RefCell<Option<TraceContext>> = const { std::cell::RefCell::new(None) };
 }
 
 /// Get the current trace context
@@ -36,7 +33,7 @@ where
 {
     let old_ctx = current_context();
     set_context(ctx.clone());
-    
+
     // Create a tracing span from the context
     let parent_span_id_str = ctx.parent_span_id.as_ref().map(|id| id.to_string());
     let span = if let Some(ref parent_id) = parent_span_id_str {
@@ -55,17 +52,17 @@ where
             span_id = %ctx.span_id,
         )
     };
-    
+
     let _guard = span.enter();
     let result = f();
     drop(_guard);
-    
+
     if let Some(old) = old_ctx {
         set_context(old);
     } else {
         clear_context();
     }
-    
+
     result
 }
 
@@ -76,13 +73,13 @@ impl TraceInstrumentation {
     /// Start a new span for an operation
     pub fn start_span(name: &str, ctx: Option<&TraceContext>) -> (Span, TraceContext) {
         use tracing::span;
-        
+
         let trace_ctx = if let Some(parent) = ctx {
             parent.child()
         } else {
             TraceContext::new()
         };
-        
+
         let parent_span_id_str = trace_ctx.parent_span_id.as_ref().map(|id| id.to_string());
         let span = if let Some(ref parent_id) = parent_span_id_str {
             span!(Level::INFO, "operation",
@@ -98,7 +95,7 @@ impl TraceInstrumentation {
                 span_id = %trace_ctx.span_id,
             )
         };
-        
+
         (span, trace_ctx)
     }
 
@@ -142,4 +139,3 @@ mod tests {
         assert!(current_context().is_none());
     }
 }
-

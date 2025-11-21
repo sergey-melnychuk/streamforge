@@ -9,9 +9,18 @@ repository = "https://github.com/sergey-melnychuk/streamforge"
 keywords = ["stream-processing", "distributed", "real-time", "event-streaming"]
 categories = ["concurrency", "database", "network-programming"]
 
+[features]
+default = []
+vault = []
+aws-secrets = []
+
 [lib]
 name = "streamforge"
 path = "src/lib.rs"
+
+[[bin]]
+name = "streamforge"
+path = "src/bin/main.rs"
 
 [dependencies]
 # Async runtime
@@ -66,6 +75,22 @@ rocksdb = "0.21"
 
 # HTTP client for sources
 reqwest = { version = "0.11", features = ["json"] }
+
+# TLS/SSL support
+rustls = "0.21"
+tokio-rustls = "0.24"
+rustls-pemfile = "1.0"
+rustls-native-certs = "0.6"
+
+# Cryptography for authentication
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+
+# CLI framework
+clap = { version = "4.4", features = ["derive"] }
+dirs = "5.0"
+uuid = { version = "1.6", features = ["v4", "serde"] }
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["async", "async_tokio", "html_reports"] }

@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, info};
 
 /// Latency histogram for tracking percentiles
 pub struct LatencyHistogram {
@@ -198,7 +197,9 @@ pub struct GlobalMetrics {
     total_events: u64,
     total_bytes: u64,
     total_errors: u64,
+    #[allow(dead_code)]
     node_count: usize,
+    #[allow(dead_code)]
     operator_count: usize,
 }
 
@@ -285,10 +286,7 @@ impl DistributedMetricsAggregator {
             })
             .collect();
 
-        let operator_snapshots: Vec<_> = operator_metrics
-            .values()
-            .map(|m| m.snapshot())
-            .collect();
+        let operator_snapshots: Vec<_> = operator_metrics.values().map(|m| m.snapshot()).collect();
 
         AggregatedMetricsSnapshot {
             global: GlobalMetricsSnapshot {
@@ -336,7 +334,9 @@ pub struct GlobalMetricsSnapshot {
     pub total_events: u64,
     pub total_bytes: u64,
     pub total_errors: u64,
+    #[allow(dead_code)]
     pub node_count: usize,
+    #[allow(dead_code)]
     pub operator_count: usize,
 }
 
@@ -386,11 +386,12 @@ mod tests {
         let node_id = NodeId::from(1);
 
         aggregator.record_node_event(node_id, 100).await;
-        aggregator.record_operator_event("op1", 100, Duration::from_millis(10)).await;
+        aggregator
+            .record_operator_event("op1", 100, Duration::from_millis(10))
+            .await;
 
         let snapshot = aggregator.get_aggregated_snapshot().await;
         assert_eq!(snapshot.global.total_events, 1);
         assert_eq!(snapshot.operators.len(), 1);
     }
 }
-

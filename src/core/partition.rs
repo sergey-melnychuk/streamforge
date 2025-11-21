@@ -129,9 +129,7 @@ mod tests {
         let partitioner = RoundRobinPartitioner::new();
         let key = EventKey::from_str("test-key");
 
-        let partitions: Vec<_> = (0..10)
-            .map(|_| partitioner.partition(&key, 5))
-            .collect();
+        let partitions: Vec<_> = (0..10).map(|_| partitioner.partition(&key, 5)).collect();
 
         // Should cycle through partitions
         assert_eq!(partitions, vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]);
@@ -150,10 +148,7 @@ mod tests {
             .min(num_partitions - 1)
         });
 
-        assert_eq!(
-            partitioner.partition(&EventKey::from_str("test"), 10),
-            0
-        );
+        assert_eq!(partitioner.partition(&EventKey::from_str("test"), 10), 0);
         assert_eq!(partitioner.partition(&EventKey::from_int(42), 10), 1);
     }
 

@@ -33,7 +33,8 @@ impl IdempotentSink {
     /// Extract transaction ID from event headers
     fn extract_transaction_id(&self, event: &Event) -> Option<TransactionId> {
         // Look for transaction_id in event headers
-        event.get_header("transaction_id")
+        event
+            .get_header("transaction_id")
             .and_then(|v| v.parse::<u64>().ok())
             .map(TransactionId::from)
     }
@@ -97,4 +98,3 @@ impl Sink for IdempotentSink {
         self.inner.close().await
     }
 }
-

@@ -12,6 +12,7 @@ pub struct IteratorSource {
 
 impl IteratorSource {
     /// Create from an iterator of events
+    #[allow(clippy::should_implement_trait)]
     pub fn from_iter<I>(iter: I) -> Self
     where
         I: IntoIterator<Item = Event>,
@@ -32,4 +33,3 @@ impl Source for IteratorSource {
         self.events.is_empty()
     }
 }
-

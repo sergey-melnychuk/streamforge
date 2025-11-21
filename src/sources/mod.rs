@@ -3,12 +3,12 @@
 //! Sources are the entry points for data into StreamForge streams.
 
 pub mod file;
-pub mod iterator;
 pub mod http;
+pub mod iterator;
 
 pub use file::FileSource;
-pub use iterator::IteratorSource;
 pub use http::{HttpSource, HttpSourceConfig};
+pub use iterator::IteratorSource;
 
 use crate::core::Event;
 use async_trait::async_trait;
@@ -39,15 +39,14 @@ impl SourceStream {
 impl futures::Stream for SourceStream {
     type Item = Event;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // For now, we'll use a simple approach
         // In a full implementation, this would properly handle async I/O
         if self.source.is_exhausted() {
             return Poll::Ready(None);
         }
-        
+
         // This is a placeholder - real implementation would use proper async
         Poll::Pending
     }
 }
-

@@ -78,10 +78,12 @@ impl TraceExporter {
                 tracing_subscriber::fmt()
                     .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
                     .init();
-                tracing::warn!("OTLP exporter requested but not fully implemented (requires 'otlp' feature)");
+                tracing::warn!(
+                    "OTLP exporter requested but not fully implemented (requires 'otlp' feature)"
+                );
             }
         }
-        
+
         Ok(())
     }
 }

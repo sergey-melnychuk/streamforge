@@ -135,15 +135,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_inner_join_builder() {
-        let left = vec![
-            create_event("a", 1, 1000),
-            create_event("b", 2, 1000),
-        ];
+        let left = vec![create_event("a", 1, 1000), create_event("b", 2, 1000)];
 
-        let right = vec![
-            create_event("a", 10, 1000),
-            create_event("c", 30, 1000),
-        ];
+        let right = vec![create_event("a", 10, 1000), create_event("c", 30, 1000)];
 
         let joined = JoinBuilder::new(left, right)
             .join_type(JoinType::Inner)
@@ -158,15 +152,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_temporal_join() {
-        let left = vec![
-            create_event("a", 1, 1000),
-            create_event("a", 2, 5000),
-        ];
+        let left = vec![create_event("a", 1, 1000), create_event("a", 2, 5000)];
 
-        let right = vec![
-            create_event("a", 10, 1500),
-            create_event("a", 20, 10000),
-        ];
+        let right = vec![create_event("a", 10, 1500), create_event("a", 20, 10000)];
 
         let joined = JoinBuilder::new(left, right)
             .with_temporal_constraint(TemporalConstraint::of(Duration::from_secs(1)))
@@ -183,10 +171,7 @@ mod tests {
         let left = vec![create_event("a", 5, 1000)];
         let right = vec![create_event("a", 10, 1000)];
 
-        let joined = JoinBuilder::new(left, right)
-            .execute()
-            .await
-            .unwrap();
+        let joined = JoinBuilder::new(left, right).execute().await.unwrap();
 
         let events = joined.sum_values().await.unwrap();
         assert_eq!(events.len(), 1);
@@ -195,10 +180,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_left_join() {
-        let left = vec![
-            create_event("a", 1, 1000),
-            create_event("b", 2, 1000),
-        ];
+        let left = vec![create_event("a", 1, 1000), create_event("b", 2, 1000)];
 
         let right = vec![create_event("a", 10, 1000)];
 

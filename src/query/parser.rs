@@ -24,12 +24,14 @@ impl QueryParser {
     pub fn parse(query: &str) -> Result<Query, ParseError> {
         // Simple parser - for now, we'll support a basic subset
         // Full SQL parser would use a proper parser generator (like pest or nom)
-        
+
         let query = query.trim();
-        
+
         // Basic validation
         if !query.to_uppercase().starts_with("SELECT") {
-            return Err(ParseError::Syntax("Query must start with SELECT".to_string()));
+            return Err(ParseError::Syntax(
+                "Query must start with SELECT".to_string(),
+            ));
         }
 
         // For now, return a simple query structure
@@ -38,6 +40,7 @@ impl QueryParser {
     }
 
     /// Parse SELECT clause
+    #[allow(dead_code)]
     fn parse_select(_tokens: &[&str]) -> Result<SelectClause, ParseError> {
         // TODO: Implement full SELECT parsing
         Ok(SelectClause {
@@ -46,6 +49,7 @@ impl QueryParser {
     }
 
     /// Parse FROM clause
+    #[allow(dead_code)]
     fn parse_from(_tokens: &[&str]) -> Result<FromClause, ParseError> {
         // TODO: Implement full FROM parsing
         Ok(FromClause {
@@ -65,4 +69,3 @@ mod tests {
         assert_eq!(query.from.stream, "default_stream");
     }
 }
-

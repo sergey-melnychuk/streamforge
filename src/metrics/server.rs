@@ -33,9 +33,9 @@ impl MetricsServer {
         let collectors = Arc::clone(&self.collectors);
         let addr = self.bind_address;
 
-        let server = tokio::spawn(async move {
-            use tokio::net::TcpListener;
+        let _server = tokio::spawn(async move {
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            use tokio::net::TcpListener;
 
             let listener = match TcpListener::bind(addr).await {
                 Ok(l) => l,
@@ -55,7 +55,7 @@ impl MetricsServer {
                             let mut buffer = [0; 1024];
                             if let Ok(n) = stream.read(&mut buffer).await {
                                 let request = String::from_utf8_lossy(&buffer[..n]);
-                                
+
                                 let response = if request.starts_with("GET /metrics") {
                                     Self::handle_metrics(&collectors).await
                                 } else if request.starts_with("GET /health") {
@@ -81,7 +81,9 @@ impl MetricsServer {
         Ok(())
     }
 
-    async fn handle_metrics(collectors: &Arc<RwLock<HashMap<String, Arc<MetricsCollector>>>>) -> String {
+    async fn handle_metrics(
+        collectors: &Arc<RwLock<HashMap<String, Arc<MetricsCollector>>>>,
+    ) -> String {
         let collectors_guard = collectors.read().await;
         let mut metrics = String::new();
 
@@ -120,18 +122,18 @@ impl MetricsServer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
 
     #[tokio::test]
     async fn test_metrics_server() {
         let server = MetricsServer::new("127.0.0.1:0".parse().unwrap());
         let collector = Arc::new(MetricsCollector::new("test"));
         collector.record_event(100);
-        
-        server.register_collector("test".to_string(), collector).await;
-        
+
+        server
+            .register_collector("test".to_string(), collector)
+            .await;
+
         // Server would need to be started to test fully
         // This is a basic structure test
     }
 }
-

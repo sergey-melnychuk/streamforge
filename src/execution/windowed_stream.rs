@@ -27,10 +27,7 @@ where
     }
 
     /// Apply an aggregation function to each window
-    pub async fn aggregate<A>(
-        self,
-        agg_fn: A,
-    ) -> Result<Vec<(Window, EventKey, EventValue)>>
+    pub async fn aggregate<A>(self, agg_fn: A) -> Result<Vec<(Window, EventKey, EventValue)>>
     where
         A: AggregateFunction,
     {

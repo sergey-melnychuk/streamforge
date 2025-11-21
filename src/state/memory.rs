@@ -2,7 +2,7 @@
 //!
 //! Fast, non-persistent state storage using concurrent hash maps
 
-use crate::state::backend::{StateBackend, StateError, StateResult};
+use crate::state::backend::{StateBackend, StateResult};
 use async_trait::async_trait;
 use bytes::Bytes;
 use dashmap::DashMap;
@@ -95,10 +95,7 @@ mod tests {
         let backend = MemoryStateBackend::new();
 
         // Put and get
-        backend
-            .put(b"key1", Bytes::from("value1"))
-            .await
-            .unwrap();
+        backend.put(b"key1", Bytes::from("value1")).await.unwrap();
         let value = backend.get(b"key1").await.unwrap();
         assert_eq!(value, Some(Bytes::from("value1")));
 
@@ -115,8 +112,14 @@ mod tests {
     async fn test_memory_backend_list_keys() {
         let backend = MemoryStateBackend::new();
 
-        backend.put(b"prefix:key1", Bytes::from("v1")).await.unwrap();
-        backend.put(b"prefix:key2", Bytes::from("v2")).await.unwrap();
+        backend
+            .put(b"prefix:key1", Bytes::from("v1"))
+            .await
+            .unwrap();
+        backend
+            .put(b"prefix:key2", Bytes::from("v2"))
+            .await
+            .unwrap();
         backend.put(b"other:key1", Bytes::from("v3")).await.unwrap();
 
         let keys = backend.list_keys(b"prefix:").await.unwrap();
@@ -134,16 +137,27 @@ mod tests {
 
         let snapshot = backend.snapshot().await.unwrap();
         assert_eq!(snapshot.len(), 2);
-        assert_eq!(snapshot.get(&Bytes::from("key1")), Some(&Bytes::from("value1")));
-        assert_eq!(snapshot.get(&Bytes::from("key2")), Some(&Bytes::from("value2")));
+        assert_eq!(
+            snapshot.get(&Bytes::from("key1")),
+            Some(&Bytes::from("value1"))
+        );
+        assert_eq!(
+            snapshot.get(&Bytes::from("key2")),
+            Some(&Bytes::from("value2"))
+        );
 
         // Clear and restore
         backend.clear().await.unwrap();
         assert_eq!(backend.get(b"key1").await.unwrap(), None);
 
         backend.restore(snapshot).await.unwrap();
-        assert_eq!(backend.get(b"key1").await.unwrap(), Some(Bytes::from("value1")));
-        assert_eq!(backend.get(b"key2").await.unwrap(), Some(Bytes::from("value2")));
+        assert_eq!(
+            backend.get(b"key1").await.unwrap(),
+            Some(Bytes::from("value1"))
+        );
+        assert_eq!(
+            backend.get(b"key2").await.unwrap(),
+            Some(Bytes::from("value2"))
+        );
     }
 }
-

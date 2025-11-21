@@ -5,12 +5,12 @@
 use crate::state::backend::{StateBackend, StateError, StateResult};
 use async_trait::async_trait;
 use bytes::Bytes;
-use rocksdb::{DB, Options, WriteOptions};
+use rocksdb::{Options, WriteOptions, DB};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::task;
-use tracing::{debug, info};
+use tracing::info;
 
 /// RocksDB state backend for persistent storage
 pub struct RocksDBStateBackend {
@@ -21,7 +21,7 @@ impl RocksDBStateBackend {
     /// Create a new RocksDB state backend
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, StateError> {
         let path = path.as_ref();
-        
+
         // Create directory if it doesn't exist
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -36,9 +36,7 @@ impl RocksDBStateBackend {
 
         info!("Opened RocksDB at {}", path.display());
 
-        Ok(Self {
-            db: Arc::new(db),
-        })
+        Ok(Self { db: Arc::new(db) })
     }
 
     /// Create with custom options
@@ -47,7 +45,7 @@ impl RocksDBStateBackend {
         options: Options,
     ) -> Result<Self, StateError> {
         let path = path.as_ref();
-        
+
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -57,9 +55,7 @@ impl RocksDBStateBackend {
 
         info!("Opened RocksDB at {} with custom options", path.display());
 
-        Ok(Self {
-            db: Arc::new(db),
-        })
+        Ok(Self { db: Arc::new(db) })
     }
 }
 
@@ -69,12 +65,10 @@ impl StateBackend for RocksDBStateBackend {
         let db = Arc::clone(&self.db);
         let key = key.to_vec();
 
-        task::spawn_blocking(move || {
-            match db.get(&key) {
-                Ok(Some(value)) => Ok(Some(Bytes::from(value))),
-                Ok(None) => Ok(None),
-                Err(e) => Err(StateError::Other(format!("RocksDB get error: {}", e))),
-            }
+        task::spawn_blocking(move || match db.get(&key) {
+            Ok(Some(value)) => Ok(Some(Bytes::from(value))),
+            Ok(None) => Ok(None),
+            Err(e) => Err(StateError::Other(format!("RocksDB get error: {}", e))),
         })
         .await
         .map_err(|e| StateError::Other(format!("Task join error: {}", e)))?
@@ -109,12 +103,10 @@ impl StateBackend for RocksDBStateBackend {
         let db = Arc::clone(&self.db);
         let key = key.to_vec();
 
-        task::spawn_blocking(move || {
-            match db.get(&key) {
-                Ok(Some(_)) => Ok(true),
-                Ok(None) => Ok(false),
-                Err(e) => Err(StateError::Other(format!("RocksDB exists error: {}", e))),
-            }
+        task::spawn_blocking(move || match db.get(&key) {
+            Ok(Some(_)) => Ok(true),
+            Ok(None) => Ok(false),
+            Err(e) => Err(StateError::Other(format!("RocksDB exists error: {}", e))),
         })
         .await
         .map_err(|e| StateError::Other(format!("Task join error: {}", e)))?
@@ -236,10 +228,7 @@ mod tests {
         let backend = RocksDBStateBackend::open(&db_path).unwrap();
 
         // Put and get
-        backend
-            .put(b"key1", Bytes::from("value1"))
-            .await
-            .unwrap();
+        backend.put(b"key1", Bytes::from("value1")).await.unwrap();
         let value = backend.get(b"key1").await.unwrap();
         assert_eq!(value, Some(Bytes::from("value1")));
 
@@ -259,8 +248,14 @@ mod tests {
 
         let backend = RocksDBStateBackend::open(&db_path).unwrap();
 
-        backend.put(b"prefix:key1", Bytes::from("v1")).await.unwrap();
-        backend.put(b"prefix:key2", Bytes::from("v2")).await.unwrap();
+        backend
+            .put(b"prefix:key1", Bytes::from("v1"))
+            .await
+            .unwrap();
+        backend
+            .put(b"prefix:key2", Bytes::from("v2"))
+            .await
+            .unwrap();
         backend.put(b"other:key1", Bytes::from("v3")).await.unwrap();
 
         let keys = backend.list_keys(b"prefix:").await.unwrap();
@@ -281,16 +276,27 @@ mod tests {
 
         let snapshot = backend.snapshot().await.unwrap();
         assert_eq!(snapshot.len(), 2);
-        assert_eq!(snapshot.get(&Bytes::from("key1")), Some(&Bytes::from("value1")));
-        assert_eq!(snapshot.get(&Bytes::from("key2")), Some(&Bytes::from("value2")));
+        assert_eq!(
+            snapshot.get(&Bytes::from("key1")),
+            Some(&Bytes::from("value1"))
+        );
+        assert_eq!(
+            snapshot.get(&Bytes::from("key2")),
+            Some(&Bytes::from("value2"))
+        );
 
         // Clear and restore
         backend.clear().await.unwrap();
         assert_eq!(backend.get(b"key1").await.unwrap(), None);
 
         backend.restore(snapshot).await.unwrap();
-        assert_eq!(backend.get(b"key1").await.unwrap(), Some(Bytes::from("value1")));
-        assert_eq!(backend.get(b"key2").await.unwrap(), Some(Bytes::from("value2")));
+        assert_eq!(
+            backend.get(b"key1").await.unwrap(),
+            Some(Bytes::from("value1"))
+        );
+        assert_eq!(
+            backend.get(b"key2").await.unwrap(),
+            Some(Bytes::from("value2"))
+        );
     }
 }
-

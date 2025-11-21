@@ -34,4 +34,3 @@ pub enum SinkError {
     #[error("Sink error: {0}")]
     Other(String),
 }
-

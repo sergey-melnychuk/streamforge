@@ -1,6 +1,6 @@
 //! Configuration builder for fluent configuration
 
-use super::{Config, ProcessingConfig};
+use super::Config;
 
 /// Builder for creating stream processing configurations
 pub struct ConfigBuilder {

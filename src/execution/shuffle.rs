@@ -46,7 +46,7 @@ impl ShuffleManager {
         &self,
         events: Vec<Event>,
         target_partition: u32,
-        operation_type: String,
+        _operation_type: String,
     ) -> Result<()> {
         // Get target node for partition
         let node_id = {
@@ -57,7 +57,11 @@ impl ShuffleManager {
         if let Some(node_id) = node_id {
             // Get node address (would need membership access)
             // For now, we'll use a placeholder
-            warn!("Shuffle to partition {} requires node address lookup", target_partition);
+            let _ = node_id;
+            warn!(
+                "Shuffle to partition {} requires node address lookup",
+                target_partition
+            );
             return Ok(());
         }
 
@@ -116,7 +120,10 @@ impl ShuffleManager {
             }
             Err(e) => {
                 warn!("Failed to shuffle data to node {}: {}", node_id, e);
-                Err(crate::error::StreamError::Unknown(format!("Shuffle error: {}", e)))
+                Err(crate::error::StreamError::Unknown(format!(
+                    "Shuffle error: {}",
+                    e
+                )))
             }
         }
     }
@@ -159,7 +166,7 @@ impl JoinShuffleCoordinator {
             for &partition in &target_partitions {
                 events_by_partition
                     .entry(partition)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(event.clone());
             }
         }
@@ -177,8 +184,6 @@ impl JoinShuffleCoordinator {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::core::{EventKey, EventValue};
 
     #[tokio::test]
     async fn test_shuffle_manager() {
@@ -188,4 +193,3 @@ mod tests {
         // assert!(true);
     }
 }
-

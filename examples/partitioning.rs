@@ -5,7 +5,7 @@
 //! Run with: cargo run --example partitioning
 
 use streamforge::core::partition::{HashPartitioner, Partitioner, RoundRobinPartitioner};
-use streamforge::core::{EventKey, Partition};
+use streamforge::core::EventKey;
 
 fn main() {
     println!("=== StreamForge Partitioning Example ===\n");

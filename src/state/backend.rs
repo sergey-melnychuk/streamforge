@@ -51,4 +51,3 @@ pub trait StateBackend: Send + Sync {
     /// Restore state from a snapshot
     async fn restore(&self, snapshot: HashMap<Bytes, Bytes>) -> StateResult<()>;
 }
-

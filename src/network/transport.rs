@@ -1,10 +1,10 @@
 //! Transport layer for network communication
 //!
-//! Provides TCP-based transport with connection management
+//! Provides TCP-based transport with optional TLS encryption
 
 use crate::network::codec::{Codec, CodecError};
 use crate::network::protocol::Message;
-use futures::{SinkExt, StreamExt};
+use crate::security::tls::{TlsConfig, TlsError};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
@@ -19,6 +19,8 @@ pub enum TransportError {
     Io(#[from] std::io::Error),
     #[error("Codec error: {0}")]
     Codec(#[from] CodecError),
+    #[error("TLS error: {0}")]
+    Tls(#[from] TlsError),
     #[error("Connection closed")]
     ConnectionClosed,
     #[error("Connection timeout")]
@@ -36,6 +38,8 @@ pub struct Transport {
     local_addr: SocketAddr,
     /// TCP listener (if bound)
     listener: Option<TcpListener>,
+    /// TLS configuration (optional)
+    tls_config: Option<TlsConfig>,
     /// Connection pool (for future optimization)
     _connections: Arc<Mutex<dashmap::DashMap<SocketAddr, TcpStream>>>,
 }
@@ -43,14 +47,31 @@ pub struct Transport {
 impl Transport {
     /// Create a new transport bound to the given address
     pub async fn bind(addr: SocketAddr) -> TransportResult<Self> {
+        Self::bind_with_tls(addr, None).await
+    }
+
+    /// Create a new transport bound to the given address with TLS
+    pub async fn bind_with_tls(
+        addr: SocketAddr,
+        tls_config: Option<TlsConfig>,
+    ) -> TransportResult<Self> {
         let listener = TcpListener::bind(&addr).await?;
         let local_addr = listener.local_addr()?;
 
-        info!("Transport bound to {}", local_addr);
+        if let Some(ref tls) = tls_config {
+            if tls.enabled {
+                info!("Transport bound to {} with TLS enabled", local_addr);
+            } else {
+                info!("Transport bound to {}", local_addr);
+            }
+        } else {
+            info!("Transport bound to {}", local_addr);
+        }
 
         Ok(Self {
             local_addr,
             listener: Some(listener),
+            tls_config,
             _connections: Arc::new(Mutex::new(dashmap::DashMap::new())),
         })
     }
@@ -71,50 +92,153 @@ impl Transport {
         let stream = TcpStream::connect(&addr).await?;
         stream.set_nodelay(true)?; // Disable Nagle's algorithm for low latency
 
+        // If TLS is enabled, wrap the connection
+        if let Some(ref tls_config) = self.tls_config {
+            if tls_config.enabled {
+                return self.connect_tls(addr, stream, tls_config).await;
+            }
+        }
+
+        // Plain TCP connection
         let (read_half, write_half) = stream.into_split();
-        let reader = FramedRead::new(read_half, Codec::new());
-        let writer = FramedWrite::new(write_half, Codec::new());
+        let reader: Box<dyn futures::Stream<Item = Result<Message, CodecError>> + Send + Unpin> =
+            Box::new(FramedRead::new(read_half, Codec::new()));
+        let writer: Box<dyn futures::Sink<Message, Error = CodecError> + Send + Unpin> =
+            Box::new(FramedWrite::new(write_half, Codec::new()));
 
         Ok(TransportConnection {
             addr,
             reader: Arc::new(Mutex::new(reader)),
             writer: Arc::new(Mutex::new(writer)),
+            is_tls: false,
+        })
+    }
+
+    /// Connect with TLS
+    async fn connect_tls(
+        &self,
+        addr: SocketAddr,
+        stream: TcpStream,
+        tls_config: &TlsConfig,
+    ) -> TransportResult<TransportConnection> {
+        use rustls::ServerName;
+        use tokio_rustls::TlsConnector;
+
+        // Build client TLS config
+        let client_config = tls_config.build_client_config()?;
+        let connector = TlsConnector::from(client_config);
+
+        // Get server name from address (use IP as hostname for now)
+        // In production, you'd want to use the actual hostname
+        let hostname = addr.ip().to_string();
+        let server_name = ServerName::try_from(hostname.as_str()).map_err(|e| {
+            TransportError::Tls(TlsError::Config(format!("Invalid server name: {}", e)))
+        })?;
+
+        // Perform TLS handshake
+        let tls_stream = connector.connect(server_name, stream).await.map_err(|e| {
+            TransportError::Tls(TlsError::Config(format!("TLS handshake failed: {}", e)))
+        })?;
+
+        // Split the TLS stream using tokio::io::split
+        let (read_half, write_half) = tokio::io::split(tls_stream);
+        let reader: Box<dyn futures::Stream<Item = Result<Message, CodecError>> + Send + Unpin> =
+            Box::new(FramedRead::new(read_half, Codec::new()));
+        let writer: Box<dyn futures::Sink<Message, Error = CodecError> + Send + Unpin> =
+            Box::new(FramedWrite::new(write_half, Codec::new()));
+
+        Ok(TransportConnection {
+            addr,
+            reader: Arc::new(Mutex::new(reader)),
+            writer: Arc::new(Mutex::new(writer)),
+            is_tls: true,
         })
     }
 
     /// Accept an incoming connection
     pub async fn accept(&self) -> TransportResult<TransportConnection> {
-        let listener = self.listener.as_ref()
-            .ok_or_else(|| TransportError::Io(
-                std::io::Error::new(std::io::ErrorKind::NotConnected, "Not bound to an address")
-            ))?;
+        let listener = self.listener.as_ref().ok_or_else(|| {
+            TransportError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "Not bound to an address",
+            ))
+        })?;
 
         let (stream, peer_addr) = listener.accept().await?;
         stream.set_nodelay(true)?;
 
         debug!("Accepted connection from {}", peer_addr);
 
+        // If TLS is enabled, wrap the connection
+        if let Some(ref tls_config) = self.tls_config {
+            if tls_config.enabled {
+                return self.accept_tls(peer_addr, stream, tls_config).await;
+            }
+        }
+
+        // Plain TCP connection
         let (read_half, write_half) = stream.into_split();
-        let reader = FramedRead::new(read_half, Codec::new());
-        let writer = FramedWrite::new(write_half, Codec::new());
+        let reader: Box<dyn futures::Stream<Item = Result<Message, CodecError>> + Send + Unpin> =
+            Box::new(FramedRead::new(read_half, Codec::new()));
+        let writer: Box<dyn futures::Sink<Message, Error = CodecError> + Send + Unpin> =
+            Box::new(FramedWrite::new(write_half, Codec::new()));
 
         Ok(TransportConnection {
             addr: peer_addr,
             reader: Arc::new(Mutex::new(reader)),
             writer: Arc::new(Mutex::new(writer)),
+            is_tls: false,
+        })
+    }
+
+    /// Accept with TLS
+    async fn accept_tls(
+        &self,
+        peer_addr: SocketAddr,
+        stream: TcpStream,
+        tls_config: &TlsConfig,
+    ) -> TransportResult<TransportConnection> {
+        use tokio_rustls::TlsAcceptor;
+
+        // Build server TLS config
+        let server_config = tls_config.build_server_config()?;
+        let acceptor = TlsAcceptor::from(server_config);
+
+        // Perform TLS handshake
+        let tls_stream = acceptor.accept(stream).await.map_err(|e| {
+            TransportError::Tls(TlsError::Config(format!("TLS handshake failed: {}", e)))
+        })?;
+
+        // Split the TLS stream using tokio::io::split
+        let (read_half, write_half) = tokio::io::split(tls_stream);
+        let reader: Box<dyn futures::Stream<Item = Result<Message, CodecError>> + Send + Unpin> =
+            Box::new(FramedRead::new(read_half, Codec::new()));
+        let writer: Box<dyn futures::Sink<Message, Error = CodecError> + Send + Unpin> =
+            Box::new(FramedWrite::new(write_half, Codec::new()));
+
+        Ok(TransportConnection {
+            addr: peer_addr,
+            reader: Arc::new(Mutex::new(reader)),
+            writer: Arc::new(Mutex::new(writer)),
+            is_tls: true,
         })
     }
 }
 
-/// A connection to a remote peer
-#[derive(Clone)]
+/// A connection to a remote peer (supports both TCP and TLS)
 pub struct TransportConnection {
     /// Remote address
     pub(crate) addr: SocketAddr,
-    /// Framed reader for incoming messages
-    pub(crate) reader: Arc<Mutex<tokio_util::codec::FramedRead<tokio::net::tcp::OwnedReadHalf, Codec>>>,
-    /// Framed writer for outgoing messages
-    pub(crate) writer: Arc<Mutex<tokio_util::codec::FramedWrite<tokio::net::tcp::OwnedWriteHalf, Codec>>>,
+    /// Framed reader for incoming messages (type-erased to support both TCP and TLS)
+    #[allow(clippy::type_complexity)]
+    pub(crate) reader:
+        Arc<Mutex<Box<dyn futures::Stream<Item = Result<Message, CodecError>> + Send + Unpin>>>,
+    /// Framed writer for outgoing messages (type-erased to support both TCP and TLS)
+    #[allow(clippy::type_complexity)]
+    pub(crate) writer:
+        Arc<Mutex<Box<dyn futures::Sink<Message, Error = CodecError> + Send + Unpin>>>,
+    /// Whether this connection uses TLS
+    pub(crate) is_tls: bool,
 }
 
 impl TransportConnection {
@@ -125,29 +249,34 @@ impl TransportConnection {
 
     /// Send a message
     pub async fn send(&self, msg: Message) -> TransportResult<()> {
+        use futures::SinkExt;
         let mut writer = self.writer.lock().await;
-        writer.send(msg).await
-            .map_err(|e| TransportError::Codec(e))
+        writer.send(msg).await.map_err(TransportError::Codec)
     }
 
     /// Receive a message
     pub async fn recv(&self) -> TransportResult<Option<Message>> {
+        use futures::StreamExt;
         let mut reader = self.reader.lock().await;
-        reader.next().await
+        reader
+            .next()
+            .await
             .transpose()
-            .map_err(|e| TransportError::Codec(e))
+            .map_err(TransportError::Codec)
+    }
+
+    /// Check if this connection uses TLS
+    pub fn is_tls(&self) -> bool {
+        self.is_tls
     }
 
     /// Try to receive a message (non-blocking)
     pub async fn try_recv(&self) -> TransportResult<Option<Message>> {
         // For now, just call recv with a timeout
         // In the future, we could use a more sophisticated approach
-        tokio::time::timeout(
-            std::time::Duration::from_millis(1),
-            self.recv(),
-        )
-        .await
-        .unwrap_or(Ok(None))
+        tokio::time::timeout(std::time::Duration::from_millis(1), self.recv())
+            .await
+            .unwrap_or(Ok(None))
     }
 }
 
@@ -225,8 +354,19 @@ impl Clone for Transport {
         Self {
             local_addr: self.local_addr,
             listener: None, // Can't clone TcpListener, but we can still use connect()
+            tls_config: self.tls_config.clone(),
             _connections: Arc::clone(&self._connections),
         }
     }
 }
 
+impl Clone for TransportConnection {
+    fn clone(&self) -> Self {
+        Self {
+            addr: self.addr,
+            reader: Arc::clone(&self.reader),
+            writer: Arc::clone(&self.writer),
+            is_tls: self.is_tls,
+        }
+    }
+}

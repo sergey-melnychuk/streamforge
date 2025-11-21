@@ -4,13 +4,12 @@
 //! for end-to-end request tracing across distributed nodes.
 
 pub mod context;
-pub mod instrumentation;
 pub mod exporter;
+pub mod instrumentation;
 
 #[cfg(test)]
 mod tests;
 
-pub use context::{TraceContext, TraceId, SpanId};
-pub use instrumentation::{TraceInstrumentation, with_trace_context};
-pub use exporter::{TraceExporter, TraceExporterConfig, init_tracing};
-
+pub use context::{SpanId, TraceContext, TraceId};
+pub use exporter::{init_tracing, TraceExporter, TraceExporterConfig};
+pub use instrumentation::{with_trace_context, TraceInstrumentation};

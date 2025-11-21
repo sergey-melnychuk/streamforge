@@ -12,14 +12,14 @@ impl QueryOptimizer {
     /// Optimize a query
     pub fn optimize(query: Query) -> Query {
         debug!("Optimizing query");
-        
+
         // For now, just return the query as-is
         // A full implementation would:
         // - Push down filters
         // - Reorder joins
         // - Select optimal indexes
         // - Eliminate redundant operations
-        
+
         query
     }
 
@@ -29,4 +29,3 @@ impl QueryOptimizer {
         false
     }
 }
-

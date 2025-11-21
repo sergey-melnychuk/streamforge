@@ -29,25 +29,26 @@
 //! # }
 //! ```
 
+pub mod config;
 pub mod core;
-pub mod operators;
+pub mod distributed;
 pub mod execution;
+pub mod metrics;
+pub mod network;
+pub mod operators;
 pub mod query;
+pub mod security;
 pub mod sinks;
 pub mod sources;
 pub mod state;
 pub mod storage;
-pub mod metrics;
-pub mod config;
-pub mod distributed;
-pub mod network;
 pub mod tracing;
 
 /// Re-exports of commonly used types and traits
 pub mod prelude {
     pub use crate::core::{Event, EventKey, EventValue, Timestamp};
-    pub use crate::operators::{FilterOp, MapOp, StreamOperator};
     pub use crate::execution::Stream;
+    pub use crate::operators::{FilterOp, MapOp, StreamOperator};
 }
 
 /// Error types for the StreamForge library

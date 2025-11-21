@@ -49,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let counts = windowed.count().await?;
-    for (window, key, count) in counts {
+    for (window, _key, count) in counts {
         println!(
             "  Window [{} - {}): {} events",
             window.start / 1000,

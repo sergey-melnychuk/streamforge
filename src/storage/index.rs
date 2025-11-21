@@ -99,6 +99,12 @@ impl LogIndex {
         key_idx.len()
     }
 
+    /// Check if the index is empty
+    pub async fn is_empty(&self) -> bool {
+        let key_idx = self.key_index.read().await;
+        key_idx.is_empty()
+    }
+
     /// Clear the index
     pub async fn clear(&self) {
         let mut key_idx = self.key_index.write().await;
@@ -159,4 +165,3 @@ mod tests {
         assert!(index.get_by_key(b"test_key").await.is_none());
     }
 }
-

@@ -146,7 +146,10 @@ impl TwoPhaseCommitCoordinator {
         let mut transactions = self.transactions.write().await;
         transactions.insert(tx_id, transaction);
 
-        info!("Started transaction {:?} with {} participants", tx_id, participant_count);
+        info!(
+            "Started transaction {:?} with {} participants",
+            tx_id, participant_count
+        );
 
         Ok(tx_id)
     }
@@ -154,19 +157,24 @@ impl TwoPhaseCommitCoordinator {
     /// Phase 1: Prepare (ask all participants to prepare)
     pub async fn prepare(&self, tx_id: TransactionId) -> Result<bool> {
         let transactions = self.transactions.read().await;
-        let transaction = transactions
-            .get(&tx_id)
-            .ok_or_else(|| crate::error::StreamError::Unknown(format!("Transaction {:?} not found", tx_id)))?;
+        let transaction = transactions.get(&tx_id).ok_or_else(|| {
+            crate::error::StreamError::Unknown(format!("Transaction {:?} not found", tx_id))
+        })?;
 
         if transaction.status != TransactionStatus::InProgress {
-            return Err(crate::error::StreamError::Unknown(
-                format!("Transaction {:?} is not in progress", tx_id)
-            ));
+            return Err(crate::error::StreamError::Unknown(format!(
+                "Transaction {:?} is not in progress",
+                tx_id
+            )));
         }
 
         // In a full implementation, we'd send prepare requests to all participants
         // For now, we'll assume all participants are ready
-        debug!("Preparing transaction {:?} with {} participants", tx_id, transaction.participants.len());
+        debug!(
+            "Preparing transaction {:?} with {} participants",
+            tx_id,
+            transaction.participants.len()
+        );
 
         Ok(true)
     }
@@ -174,14 +182,15 @@ impl TwoPhaseCommitCoordinator {
     /// Phase 2: Commit (tell all participants to commit)
     pub async fn commit(&self, tx_id: TransactionId) -> Result<()> {
         let mut transactions = self.transactions.write().await;
-        let transaction = transactions
-            .get_mut(&tx_id)
-            .ok_or_else(|| crate::error::StreamError::Unknown(format!("Transaction {:?} not found", tx_id)))?;
+        let transaction = transactions.get_mut(&tx_id).ok_or_else(|| {
+            crate::error::StreamError::Unknown(format!("Transaction {:?} not found", tx_id))
+        })?;
 
         if transaction.status != TransactionStatus::InProgress {
-            return Err(crate::error::StreamError::Unknown(
-                format!("Transaction {:?} is not in progress", tx_id)
-            ));
+            return Err(crate::error::StreamError::Unknown(format!(
+                "Transaction {:?} is not in progress",
+                tx_id
+            )));
         }
 
         let timestamp = chrono::Utc::now().timestamp_millis() as u64;
@@ -200,9 +209,9 @@ impl TwoPhaseCommitCoordinator {
     /// Abort a transaction
     pub async fn abort(&self, tx_id: TransactionId) -> Result<()> {
         let mut transactions = self.transactions.write().await;
-        let transaction = transactions
-            .get_mut(&tx_id)
-            .ok_or_else(|| crate::error::StreamError::Unknown(format!("Transaction {:?} not found", tx_id)))?;
+        let transaction = transactions.get_mut(&tx_id).ok_or_else(|| {
+            crate::error::StreamError::Unknown(format!("Transaction {:?} not found", tx_id))
+        })?;
 
         let timestamp = chrono::Utc::now().timestamp_millis() as u64;
         transaction.abort(timestamp);
@@ -315,10 +324,10 @@ impl CheckpointCoordinator {
     /// Coordinate a checkpoint across all participants
     pub async fn coordinate_checkpoint(&self) -> Result<u64> {
         let participants = self.participants.read().await;
-        
+
         if participants.is_empty() {
             return Err(crate::error::StreamError::Unknown(
-                "No participants registered for checkpoint".to_string()
+                "No participants registered for checkpoint".to_string(),
             ));
         }
 
@@ -362,6 +371,7 @@ pub struct RecoveryProtocol {
     /// Idempotent state tracker
     idempotent_tracker: Arc<IdempotentStateTracker>,
     /// 2PC coordinator
+    #[allow(dead_code)]
     tx_coordinator: Arc<TwoPhaseCommitCoordinator>,
 }
 
@@ -488,11 +498,17 @@ mod tests {
     #[tokio::test]
     async fn test_checkpoint_coordinator() {
         let coordinator = CheckpointCoordinator::new();
-        coordinator.register_participant("operator1".to_string()).await;
-        coordinator.register_participant("operator2".to_string()).await;
+        coordinator
+            .register_participant("operator1".to_string())
+            .await;
+        coordinator
+            .register_participant("operator2".to_string())
+            .await;
 
         let checkpoint_id = coordinator.coordinate_checkpoint().await.unwrap();
-        assert_eq!(coordinator.get_last_checkpoint_id().await, Some(checkpoint_id));
+        assert_eq!(
+            coordinator.get_last_checkpoint_id().await,
+            Some(checkpoint_id)
+        );
     }
 }
-

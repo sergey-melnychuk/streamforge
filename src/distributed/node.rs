@@ -8,7 +8,9 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Unique identifier for a node in the cluster
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct NodeId(u64);
 
 impl NodeId {
@@ -28,8 +30,6 @@ impl NodeId {
             .as_nanos();
 
         let state = RandomState::new();
-        
-        
 
         Self(state.hash_one(now))
     }
@@ -128,7 +128,8 @@ impl NodeMetadata {
 
     /// Get a tag value by key
     pub fn get_tag(&self, key: &str) -> Option<&str> {
-        self.tags.iter()
+        self.tags
+            .iter()
             .find(|(k, _)| k == key)
             .map(|(_, v)| v.as_str())
     }
@@ -270,7 +271,8 @@ mod tests {
         metadata.last_heartbeat = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs() - 20;
+            .as_secs()
+            - 20;
 
         // Should be stale with 10 second timeout
         assert!(metadata.is_stale(10));

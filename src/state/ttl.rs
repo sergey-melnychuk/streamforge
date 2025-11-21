@@ -2,7 +2,7 @@
 //!
 //! Provides TTL support, automatic cleanup, and state size management
 
-use crate::state::backend::{StateBackend, StateError, StateResult};
+use crate::state::backend::{StateBackend, StateResult};
 use async_trait::async_trait;
 use bytes::Bytes;
 use std::collections::HashMap;
@@ -227,8 +227,8 @@ impl TtlStateBackend {
 
         // Remove selected entries
         for key in &to_remove {
-            if let Some(entry) = entries.remove(key) {
-                if let Err(e) = inner.delete(&key).await {
+            if let Some(_entry) = entries.remove(key) {
+                if let Err(e) = inner.delete(key).await {
                     warn!("Failed to delete key from inner backend: {}", e);
                 }
             }
@@ -470,11 +470,20 @@ mod tests {
 
         // Add entries that exceed size limit
         // First entry: 50 bytes (total: 50)
-        backend.put(b"key1", Bytes::from(vec![0u8; 50])).await.unwrap();
+        backend
+            .put(b"key1", Bytes::from(vec![0u8; 50]))
+            .await
+            .unwrap();
         // Second entry: 50 bytes (total: 100, at limit)
-        backend.put(b"key2", Bytes::from(vec![0u8; 50])).await.unwrap();
+        backend
+            .put(b"key2", Bytes::from(vec![0u8; 50]))
+            .await
+            .unwrap();
         // Third entry: 50 bytes (total: 150, exceeds limit - should trigger cleanup)
-        backend.put(b"key3", Bytes::from(vec![0u8; 50])).await.unwrap();
+        backend
+            .put(b"key3", Bytes::from(vec![0u8; 50]))
+            .await
+            .unwrap();
 
         // Give a small moment for async cleanup to complete
         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -482,10 +491,13 @@ mod tests {
         // Size should be managed (should be <= 100 after cleanup)
         let size = backend.get_size().await;
         assert!(size <= 100, "Size {} exceeds limit of 100", size);
-        
+
         // Verify that at least one entry was removed
         let entry_count = backend.get_entry_count().await;
-        assert!(entry_count <= 2, "Expected at most 2 entries after cleanup, got {}", entry_count);
+        assert!(
+            entry_count <= 2,
+            "Expected at most 2 entries after cleanup, got {}",
+            entry_count
+        );
     }
 }
-

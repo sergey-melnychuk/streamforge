@@ -7,11 +7,11 @@
 //! - Windowed aggregation
 //! - Exactly-once processing with transaction IDs
 
-use streamforge::core::{Event, EventKey, EventValue};
-use streamforge::execution::Stream;
-use streamforge::operators::{FilterOp, MapOp, StreamOperator};
-use streamforge::sources::{Source, http::{HttpSource, HttpSourceConfig}};
 use std::time::Duration;
+use streamforge::sources::{
+    http::{HttpSource, HttpSourceConfig},
+    Source,
+};
 use tokio::time::sleep;
 
 #[tokio::main]
@@ -73,4 +73,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     Ok(())
 }
-

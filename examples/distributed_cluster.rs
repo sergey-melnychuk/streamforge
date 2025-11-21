@@ -135,8 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create RPC server with membership
     let membership_for_rpc = Arc::new(ClusterMembership::new(local_id, 30));
-    let rpc_server = RpcServer::new(transport.clone())
-        .with_membership(membership_for_rpc.clone());
+    let rpc_server = RpcServer::new(transport.clone()).with_membership(membership_for_rpc.clone());
 
     // Start RPC server in background
     let server_handle = {
@@ -165,10 +164,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut discovery = GossipDiscovery::new(local_node_meta.clone(), config.clone())
         .with_transport(Arc::new(transport.clone()));
 
-    println!(
-        "   Local node: {} @ {}",
-        local_node_meta.id, actual_addr
-    );
+    println!("   Local node: {} @ {}", local_node_meta.id, actual_addr);
     println!("   Gossip interval: {:?}", config.gossip_interval);
     println!("   Gossip fanout: {}", config.gossip_fanout);
     println!("   Heartbeat timeout: {:?}", config.heartbeat_timeout);

@@ -79,10 +79,14 @@ impl JoinedEvent {
     /// Convert to event with tuple value (JSON string)
     pub fn to_event_tuple(self) -> Event {
         // Create a simple string representation
-        let left_str = self.left_value.as_ref()
+        let left_str = self
+            .left_value
+            .as_ref()
             .map(|v| format!("{}", v))
             .unwrap_or_else(|| "null".to_string());
-        let right_str = self.right_value.as_ref()
+        let right_str = self
+            .right_value
+            .as_ref()
             .map(|v| format!("{}", v))
             .unwrap_or_else(|| "null".to_string());
 
@@ -109,18 +113,12 @@ impl JoinState {
 
     /// Add an event from the left stream
     pub fn add_left(&mut self, event: Event) {
-        self.left
-            .entry(event.key.clone())
-            .or_default()
-            .push(event);
+        self.left.entry(event.key.clone()).or_default().push(event);
     }
 
     /// Add an event from the right stream
     pub fn add_right(&mut self, event: Event) {
-        self.right
-            .entry(event.key.clone())
-            .or_default()
-            .push(event);
+        self.right.entry(event.key.clone()).or_default().push(event);
     }
 
     /// Perform join based on join type and temporal constraint
@@ -135,14 +133,26 @@ impl JoinState {
             JoinType::Inner => {
                 for (key, left_events) in &self.left {
                     if let Some(right_events) = self.right.get(key) {
-                        self.join_matching(key, left_events, right_events, constraint, &mut results);
+                        self.join_matching(
+                            key,
+                            left_events,
+                            right_events,
+                            constraint,
+                            &mut results,
+                        );
                     }
                 }
             }
             JoinType::Left => {
                 for (key, left_events) in &self.left {
                     if let Some(right_events) = self.right.get(key) {
-                        self.join_matching(key, left_events, right_events, constraint, &mut results);
+                        self.join_matching(
+                            key,
+                            left_events,
+                            right_events,
+                            constraint,
+                            &mut results,
+                        );
                     } else {
                         // Left side with no match
                         for left_event in left_events {
@@ -159,7 +169,13 @@ impl JoinState {
             JoinType::Right => {
                 for (key, right_events) in &self.right {
                     if let Some(left_events) = self.left.get(key) {
-                        self.join_matching(key, left_events, right_events, constraint, &mut results);
+                        self.join_matching(
+                            key,
+                            left_events,
+                            right_events,
+                            constraint,
+                            &mut results,
+                        );
                     } else {
                         // Right side with no match
                         for right_event in right_events {
@@ -175,7 +191,8 @@ impl JoinState {
             }
             JoinType::Outer => {
                 // All keys from both sides
-                let mut all_keys: std::collections::HashSet<_> = self.left.keys().cloned().collect();
+                let mut all_keys: std::collections::HashSet<_> =
+                    self.left.keys().cloned().collect();
                 all_keys.extend(self.right.keys().cloned());
 
                 for key in all_keys {
@@ -306,11 +323,17 @@ mod tests {
         // Both left events appear (a matched, b unmatched)
         assert_eq!(results.len(), 2);
 
-        let a_result = results.iter().find(|r| r.key == EventKey::from_str("a")).unwrap();
+        let a_result = results
+            .iter()
+            .find(|r| r.key == EventKey::from_str("a"))
+            .unwrap();
         assert!(a_result.left_value.is_some());
         assert!(a_result.right_value.is_some());
 
-        let b_result = results.iter().find(|r| r.key == EventKey::from_str("b")).unwrap();
+        let b_result = results
+            .iter()
+            .find(|r| r.key == EventKey::from_str("b"))
+            .unwrap();
         assert!(b_result.left_value.is_some());
         assert!(b_result.right_value.is_none());
     }

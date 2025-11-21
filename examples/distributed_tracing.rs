@@ -6,13 +6,13 @@
 //! - End-to-end request tracing
 
 use streamforge::core::{Event, EventKey, EventValue};
-use streamforge::tracing::{TraceContext, init_tracing};
+use streamforge::tracing::{init_tracing, TraceContext};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Initialize tracing
     init_tracing("streamforge-tracing-demo")?;
-    
+
     println!("🔍 StreamForge Distributed Tracing Demo");
     println!("========================================\n");
 
@@ -23,18 +23,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Simulate processing events with tracing
     let events = vec![
-        Event::now(
-            EventKey::String("key1".into()),
-            EventValue::Int(1),
-        ),
-        Event::now(
-            EventKey::String("key2".into()),
-            EventValue::Int(2),
-        ),
-        Event::now(
-            EventKey::String("key3".into()),
-            EventValue::Int(3),
-        ),
+        Event::now(EventKey::String("key1".into()), EventValue::Int(1)),
+        Event::now(EventKey::String("key2".into()), EventValue::Int(2)),
+        Event::now(EventKey::String("key3".into()), EventValue::Int(3)),
     ];
 
     // Create child spans for each operation
@@ -42,13 +33,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("Child Span 1:");
     println!("  Trace ID: {} (same as root)", child1.trace_id);
     println!("  Span ID: {} (new)", child1.span_id);
-    println!("  Parent Span ID: {} (root span)\n", child1.parent_span_id.unwrap());
+    println!(
+        "  Parent Span ID: {} (root span)\n",
+        child1.parent_span_id.unwrap()
+    );
 
     let child2 = child1.child();
     println!("Child Span 2 (child of Span 1):");
     println!("  Trace ID: {} (same as root)", child2.trace_id);
     println!("  Span ID: {} (new)", child2.span_id);
-    println!("  Parent Span ID: {} (child1 span)\n", child2.parent_span_id.unwrap());
+    println!(
+        "  Parent Span ID: {} (child1 span)\n",
+        child2.parent_span_id.unwrap()
+    );
 
     // Demonstrate trace context with attributes
     let mut traced_ctx = TraceContext::new();
@@ -73,4 +70,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     Ok(())
 }
-

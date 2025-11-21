@@ -1,0 +1,49 @@
+# Sample StreamForge Job Configuration
+
+[processing]
+parallelism = 4
+buffer_size = 1024
+backpressure_enabled = true
+batch_size = 1000
+
+[cluster]
+bind_address = "127.0.0.1:9000"
+seed_nodes = []
+
+[cluster.gossip]
+gossip_interval = 1
+gossip_fanout = 3
+heartbeat_timeout = 10
+dead_timeout = 30
+
+[cluster.raft]
+election_timeout_min = 150
+election_timeout_max = 300
+heartbeat_interval = 50
+
+[cluster.replication]
+replication_factor = 1
+sync_mode = "Async"
+enable_read_replicas = false
+
+[state]
+backend_type = "Memory"
+state_dir = "/tmp/streamforge/state"
+
+[state.checkpoint]
+enabled = true
+interval = 30
+checkpoint_dir = "/tmp/streamforge/checkpoints"
+max_checkpoints = 10
+
+[network]
+tcp_keepalive = 60
+connection_timeout = 30
+max_connections = 100
+send_buffer_size = 65536
+recv_buffer_size = 65536
+
+[metrics]
+enabled = true
+export_interval = 10
+

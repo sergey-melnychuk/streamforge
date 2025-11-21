@@ -4,12 +4,12 @@
 //!
 //! Run with: cargo run --example file_source_sink
 
-use streamforge::core::{Event, EventKey, EventValue};
+use std::io::Write;
+use streamforge::core::{Event, EventValue};
 use streamforge::execution::Stream;
 use streamforge::sinks::file::FileSink;
 use streamforge::sources::file::FileSource;
 use tempfile::NamedTempFile;
-use std::io::Write;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -88,4 +88,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-

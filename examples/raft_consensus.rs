@@ -10,9 +10,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use streamforge::distributed::{
-    ClusterMembership, NodeId, NodeMetadata, Raft, RaftConfig,
-};
+use streamforge::distributed::{ClusterMembership, NodeId, Raft, RaftConfig};
 use streamforge::network::{RpcServer, Transport};
 use tokio::time::sleep;
 use tracing_subscriber;
@@ -57,8 +55,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         heartbeat_interval: Duration::from_millis(50),
     };
 
-    let raft1 = Arc::new(Raft::new(node1_id, Arc::new(transport1.clone()), raft_config.clone()));
-    
+    let raft1 = Arc::new(Raft::new(
+        node1_id,
+        Arc::new(transport1.clone()),
+        raft_config.clone(),
+    ));
+
     // Add nodes to Raft
     raft1.add_node(node1_id, node1_addr).await;
     raft1.add_node(node2_id, node2_addr).await;
@@ -77,7 +79,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     sleep(Duration::from_millis(200)).await;
-    println!("   ✓ Node 1 RPC server started on {}", transport1.local_addr());
+    println!(
+        "   ✓ Node 1 RPC server started on {}",
+        transport1.local_addr()
+    );
     println!();
 
     // ========================================================================
@@ -107,7 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   Node ID: {}", node1_id);
     println!("   Is leader: {}", raft1.is_leader().await);
     println!("   Current leader: {:?}", raft1.get_leader().await);
-    
+
     let state = raft1.get_state().await;
     println!("   Current term: {}", state.current_term);
     println!("   Voted for: {:?}", state.voted_for);
@@ -136,4 +141,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-

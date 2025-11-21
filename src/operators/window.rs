@@ -105,7 +105,6 @@ impl TumblingWindow {
         let adjusted = timestamp - offset_ms;
 
         // Floor to window boundary
-        
 
         (adjusted / size_ms) * size_ms + offset_ms
     }
@@ -146,7 +145,11 @@ impl SlidingWindow {
 
     /// Create a sliding window with size, slide, and offset
     pub fn with_offset(size: Duration, slide: Duration, offset: Duration) -> Self {
-        Self { size, slide, offset }
+        Self {
+            size,
+            slide,
+            offset,
+        }
     }
 }
 
@@ -160,7 +163,8 @@ impl WindowAssigner for SlidingWindow {
 
         // Calculate the first window that could contain this timestamp
         // This is the window that starts at or before (timestamp - size + 1)
-        let first_window_start = ((timestamp - offset_ms - size_ms + 1) / slide_ms) * slide_ms + offset_ms;
+        let first_window_start =
+            ((timestamp - offset_ms - size_ms + 1) / slide_ms) * slide_ms + offset_ms;
 
         // Generate all windows that contain this timestamp
         let mut windows = Vec::new();
@@ -271,10 +275,8 @@ mod tests {
 
     #[test]
     fn test_tumbling_window_with_offset() {
-        let assigner = TumblingWindow::with_offset(
-            Duration::from_secs(60),
-            Duration::from_secs(15),
-        );
+        let assigner =
+            TumblingWindow::with_offset(Duration::from_secs(60), Duration::from_secs(15));
 
         let event = Event::new(
             EventKey::None,
@@ -315,11 +317,7 @@ mod tests {
     fn test_session_window() {
         let assigner = SessionWindow::with_gap(Duration::from_secs(30));
 
-        let event = Event::new(
-            EventKey::None,
-            EventValue::from_int(1),
-            10000,
-        );
+        let event = Event::new(EventKey::None, EventValue::from_int(1), 10000);
 
         let windows = assigner.assign_windows(&event);
         assert_eq!(windows.len(), 1);

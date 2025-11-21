@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock, Semaphore};
-use tracing::{debug, warn};
+use tracing::warn;
 
 /// Backpressure signal indicating system state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,7 +62,7 @@ impl BackpressureDetector {
     pub fn new(max_queue_size: usize) -> Self {
         let warning_threshold = (max_queue_size as f64 * 0.5) as usize;
         let critical_threshold = (max_queue_size as f64 * 0.8) as usize;
-        
+
         Self {
             max_queue_size,
             warning_threshold,
@@ -80,7 +80,7 @@ impl BackpressureDetector {
     /// Get the current backpressure level
     pub async fn get_level(&self) -> BackpressureLevel {
         let size = *self.current_size.read().await;
-        
+
         if size >= self.critical_threshold {
             BackpressureLevel::Severe
         } else if size >= self.warning_threshold {
@@ -106,7 +106,7 @@ impl BackpressureDetector {
     pub async fn should_throttle(&self, input_rate: f64) -> bool {
         let processing_rate = self.get_processing_rate().await;
         let queue_size = *self.current_size.read().await;
-        
+
         // Throttle if input rate significantly exceeds processing rate
         // or if queue is getting too large
         input_rate > processing_rate * 1.5 || queue_size > self.warning_threshold
@@ -132,7 +132,7 @@ impl RateTracker {
     fn record_event(&mut self) {
         let now = Instant::now();
         self.events.push(now);
-        
+
         // Remove events outside the window
         let cutoff = now - Duration::from_secs_f64(self.window_secs);
         self.events.retain(|&t| t > cutoff);
@@ -146,7 +146,7 @@ impl RateTracker {
         let now = Instant::now();
         let cutoff = now - Duration::from_secs_f64(self.window_secs);
         let recent_events: usize = self.events.iter().filter(|&&t| t > cutoff).count();
-        
+
         recent_events as f64 / self.window_secs
     }
 }
@@ -184,7 +184,7 @@ impl FlowController {
     /// Adjust permits based on backpressure level
     pub async fn adjust_permits(&self) {
         let level = self.detector.get_level().await;
-        
+
         // Reduce permits under backpressure
         let target_permits = match level {
             BackpressureLevel::None => self.initial_permits,
@@ -194,7 +194,7 @@ impl FlowController {
         };
 
         let current_permits = self.semaphore.available_permits();
-        
+
         if target_permits > current_permits {
             // Add permits
             let to_add = target_permits - current_permits;
@@ -211,7 +211,7 @@ impl FlowController {
 }
 
 /// Backpressure-aware channel that monitors queue size
-/// 
+///
 /// This is a simplified implementation. In production, you'd want
 /// a more sophisticated approach that properly tracks queue size.
 pub struct BackpressureChannel<T> {
@@ -225,20 +225,20 @@ pub struct BackpressureChannel<T> {
 
 impl<T: Send + 'static> BackpressureChannel<T> {
     /// Create a new backpressure-aware channel
-    /// 
+    ///
     /// Note: This is a simplified implementation. Queue size tracking
     /// is approximate and based on manual tracking.
     pub fn new(capacity: usize) -> (Self, mpsc::Receiver<T>) {
         let (sender, receiver) = mpsc::channel(capacity);
         let detector = Arc::new(BackpressureDetector::new(capacity));
         let queue_size = Arc::new(RwLock::new(0));
-        
+
         let channel = Self {
             sender,
             detector: Arc::clone(&detector),
             queue_size,
         };
-        
+
         (channel, receiver)
     }
 
@@ -249,7 +249,7 @@ impl<T: Send + 'static> BackpressureChannel<T> {
         if level == BackpressureLevel::Severe {
             warn!("Severe backpressure detected, may drop event");
         }
-        
+
         // Try to send
         match self.sender.try_send(item) {
             Ok(()) => {
@@ -293,7 +293,7 @@ impl<T: Send + 'static> BackpressureChannel<T> {
             Err(e) => Err(e),
         }
     }
-    
+
     /// Notify that an item was consumed (call this when receiving)
     pub async fn notify_consumed(&self) {
         let mut size = self.queue_size.write().await;
@@ -316,18 +316,18 @@ mod tests {
     #[tokio::test]
     async fn test_backpressure_detector() {
         let detector = BackpressureDetector::new(100);
-        
+
         // Initially no backpressure
         assert_eq!(detector.get_level().await, BackpressureLevel::None);
-        
+
         // Update to mild backpressure
         detector.update_size(30).await;
         assert_eq!(detector.get_level().await, BackpressureLevel::Mild);
-        
+
         // Update to moderate backpressure
         detector.update_size(60).await;
         assert_eq!(detector.get_level().await, BackpressureLevel::Moderate);
-        
+
         // Update to severe backpressure
         detector.update_size(90).await;
         assert_eq!(detector.get_level().await, BackpressureLevel::Severe);
@@ -336,12 +336,12 @@ mod tests {
     #[tokio::test]
     async fn test_rate_tracker() {
         let detector = BackpressureDetector::new(100);
-        
+
         // Record some events
         for _ in 0..10 {
             detector.record_processed().await;
         }
-        
+
         // Should have some rate
         let rate = detector.get_processing_rate().await;
         assert!(rate > 0.0);
@@ -350,13 +350,12 @@ mod tests {
     #[tokio::test]
     async fn test_flow_controller() {
         let controller = FlowController::new(10, 100);
-        
+
         // Should be able to acquire permits
         let _permit1 = controller.acquire_permit().await;
         let _permit2 = controller.acquire_permit().await;
-        
+
         // Available permits should be reduced
         assert!(controller.semaphore.available_permits() < 10);
     }
 }
-

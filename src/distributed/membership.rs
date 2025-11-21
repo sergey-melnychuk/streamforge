@@ -106,7 +106,8 @@ impl ClusterMembership {
     /// Get all alive nodes
     pub fn get_alive_nodes(&self) -> Vec<NodeMetadata> {
         let nodes = self.nodes.read().unwrap();
-        nodes.values()
+        nodes
+            .values()
             .filter(|n| n.status == NodeStatus::Alive)
             .cloned()
             .collect()
@@ -121,7 +122,8 @@ impl ClusterMembership {
     /// Get the number of alive nodes
     pub fn alive_node_count(&self) -> usize {
         let nodes = self.nodes.read().unwrap();
-        nodes.values()
+        nodes
+            .values()
             .filter(|n| n.status == NodeStatus::Alive)
             .count()
     }
@@ -242,7 +244,10 @@ mod tests {
         membership.add_node(node.clone());
 
         let event = membership.update_status(node.id, NodeStatus::Suspected);
-        assert!(matches!(event, Some(MembershipEvent::NodeStatusChanged(_, NodeStatus::Suspected))));
+        assert!(matches!(
+            event,
+            Some(MembershipEvent::NodeStatusChanged(_, NodeStatus::Suspected))
+        ));
 
         let retrieved = membership.get_node(node.id).unwrap();
         assert_eq!(retrieved.status, NodeStatus::Suspected);

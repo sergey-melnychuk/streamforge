@@ -2,14 +2,14 @@
 //!
 //! Provides checkpoint creation and restoration from append-only logs
 
-use crate::state::backend::{StateBackend, StateError, StateResult};
-use crate::storage::log::{AppendOnlyLog, LogError, LogResult};
+use crate::state::backend::{StateBackend, StateError};
+use crate::storage::log::{AppendOnlyLog, LogError};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::{debug, info};
+use tracing::info;
 
 /// Checkpoint metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,8 +62,7 @@ impl CheckpointManager {
 
         // Create checkpoint directory if it doesn't exist
         if let Some(parent) = checkpoint_dir.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| CheckpointError::Log(LogError::Io(e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| CheckpointError::Log(LogError::Io(e)))?;
         }
         std::fs::create_dir_all(&checkpoint_dir)
             .map_err(|e| CheckpointError::Log(LogError::Io(e)))?;
@@ -85,7 +84,7 @@ impl CheckpointManager {
         let entry_count = snapshot.len();
 
         // Get current log offset
-        let log_offset = self.log.size().await?;
+        let _log_offset = self.log.size().await?;
 
         // Convert snapshot to serializable format (Bytes -> Vec<u8>)
         let snapshot_vec: HashMap<Vec<u8>, Vec<u8>> = snapshot
@@ -107,7 +106,9 @@ impl CheckpointManager {
             .as_secs();
 
         // Generate unique ID: timestamp * 1000 + counter (ensures uniqueness)
-        let counter = self.checkpoint_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let counter = self
+            .checkpoint_counter
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let id = timestamp * 1000 + (counter % 1000);
 
         let metadata = CheckpointMetadata {
@@ -118,7 +119,9 @@ impl CheckpointManager {
         };
 
         // Save metadata to file
-        let metadata_path = self.checkpoint_dir.join(format!("checkpoint_{}.meta", metadata.id));
+        let metadata_path = self
+            .checkpoint_dir
+            .join(format!("checkpoint_{}.meta", metadata.id));
         let metadata_bytes = bincode::serialize(&metadata)
             .map_err(|e| CheckpointError::Serialization(e.to_string()))?;
         std::fs::write(&metadata_path, metadata_bytes)
@@ -137,9 +140,11 @@ impl CheckpointManager {
         info!("Restoring checkpoint {}...", checkpoint_id);
 
         // Load metadata
-        let metadata_path = self.checkpoint_dir.join(format!("checkpoint_{}.meta", checkpoint_id));
-        let metadata_bytes = std::fs::read(&metadata_path)
-            .map_err(|_| CheckpointError::NotFound(checkpoint_id))?;
+        let metadata_path = self
+            .checkpoint_dir
+            .join(format!("checkpoint_{}.meta", checkpoint_id));
+        let metadata_bytes =
+            std::fs::read(&metadata_path).map_err(|_| CheckpointError::NotFound(checkpoint_id))?;
 
         let metadata: CheckpointMetadata = bincode::deserialize(&metadata_bytes)
             .map_err(|e| CheckpointError::Deserialization(e.to_string()))?;
@@ -180,7 +185,9 @@ impl CheckpointManager {
 
             if path.extension().and_then(|s| s.to_str()) == Some("meta") {
                 if let Ok(metadata_bytes) = std::fs::read(&path) {
-                    if let Ok(metadata) = bincode::deserialize::<CheckpointMetadata>(&metadata_bytes) {
+                    if let Ok(metadata) =
+                        bincode::deserialize::<CheckpointMetadata>(&metadata_bytes)
+                    {
                         checkpoints.push(metadata);
                     }
                 }
@@ -201,7 +208,9 @@ impl CheckpointManager {
 
     /// Delete a checkpoint
     pub fn delete_checkpoint(&self, checkpoint_id: u64) -> CheckpointResult<()> {
-        let metadata_path = self.checkpoint_dir.join(format!("checkpoint_{}.meta", checkpoint_id));
+        let metadata_path = self
+            .checkpoint_dir
+            .join(format!("checkpoint_{}.meta", checkpoint_id));
         if metadata_path.exists() {
             std::fs::remove_file(&metadata_path)
                 .map_err(|e| CheckpointError::Log(LogError::Io(e)))?;
@@ -274,4 +283,3 @@ mod tests {
         assert!(latest.unwrap().timestamp >= metadata2.timestamp);
     }
 }
-

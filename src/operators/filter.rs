@@ -34,10 +34,7 @@ where
     }
 
     fn process_batch(&mut self, events: Vec<Event>) -> Result<Vec<Event>> {
-        Ok(events
-            .into_iter()
-            .filter(|e| (self.predicate)(e))
-            .collect())
+        Ok(events.into_iter().filter(|e| (self.predicate)(e)).collect())
     }
 }
 

@@ -2,12 +2,12 @@
 //!
 //! Implements leader-follower replication for partitions across nodes
 
-use crate::distributed::node::{NodeId, NodeMetadata};
+use crate::distributed::node::NodeId;
 use crate::error::Result;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 /// Replication role for a partition
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,9 +57,8 @@ impl PartitionReplication {
 
     /// Get the leader replica
     pub fn get_leader(&self) -> Option<&PartitionReplica> {
-        self.leader.and_then(|leader_id| {
-            self.replicas.iter().find(|r| r.node_id == leader_id)
-        })
+        self.leader
+            .and_then(|leader_id| self.replicas.iter().find(|r| r.node_id == leader_id))
     }
 
     /// Get all follower replicas
@@ -72,10 +71,7 @@ impl PartitionReplication {
 
     /// Get in-sync replicas
     pub fn get_in_sync_replicas(&self) -> Vec<&PartitionReplica> {
-        self.replicas
-            .iter()
-            .filter(|r| r.in_sync)
-            .collect()
+        self.replicas.iter().filter(|r| r.in_sync).collect()
     }
 
     /// Check if we have enough replicas
@@ -107,7 +103,7 @@ impl PartitionReplication {
     /// Remove a replica
     pub fn remove_replica(&mut self, node_id: NodeId) {
         self.replicas.retain(|r| r.node_id != node_id);
-        
+
         // If we removed the leader, elect a new one
         if self.leader == Some(node_id) {
             self.elect_new_leader();
@@ -124,7 +120,7 @@ impl PartitionReplication {
             .max_by_key(|r| r.last_sequence)
         {
             let new_leader_id = new_leader.node_id;
-            
+
             // Update roles
             for replica in &mut self.replicas {
                 if replica.node_id == new_leader_id {
@@ -132,11 +128,17 @@ impl PartitionReplication {
                     replica.in_sync = true;
                 }
             }
-            
+
             self.leader = Some(new_leader_id);
-            info!("Elected new leader for partition {}: {:?}", self.partition, new_leader_id);
+            info!(
+                "Elected new leader for partition {}: {:?}",
+                self.partition, new_leader_id
+            );
         } else {
-            warn!("No followers available to elect as leader for partition {}", self.partition);
+            warn!(
+                "No followers available to elect as leader for partition {}",
+                self.partition
+            );
             self.leader = None;
         }
     }
@@ -205,13 +207,13 @@ impl ReplicationManager {
                 if replication.leader == Some(failed_node) {
                     // Remove failed leader
                     replication.remove_replica(failed_node);
-                    
+
                     // Elect new leader
                     replication.elect_new_leader();
-                    
+
                     if let Some(new_leader) = replication.leader {
                         promoted.push((partition, new_leader));
-                        
+
                         // Notify new leader via RPC if available
                         if let Some(rpc_client) = &self.rpc_client {
                             if let Some(leader_addr) = self
@@ -223,11 +225,14 @@ impl ReplicationManager {
                                     .promote_replica(leader_addr, partition, new_leader)
                                     .await
                                 {
-                                    warn!("Failed to notify new leader {} for partition {}: {}", new_leader, partition, e);
+                                    warn!(
+                                        "Failed to notify new leader {} for partition {}: {}",
+                                        new_leader, partition, e
+                                    );
                                 }
                             }
                         }
-                        
+
                         info!(
                             "Promoted replica {} to leader for partition {} after failure of {}",
                             new_leader, partition, failed_node
@@ -236,7 +241,10 @@ impl ReplicationManager {
                 } else {
                     // Failed node is a follower - just remove it
                     replication.remove_replica(failed_node);
-                    info!("Removed failed follower {} from partition {}", failed_node, partition);
+                    info!(
+                        "Removed failed follower {} from partition {}",
+                        failed_node, partition
+                    );
                 }
             }
         }
@@ -321,9 +329,13 @@ impl ReplicationManager {
     }
 
     /// Handle leader failure and elect new leader
-    pub async fn handle_leader_failure(&self, partition: u32, failed_leader: NodeId) -> Result<Option<NodeId>> {
+    pub async fn handle_leader_failure(
+        &self,
+        partition: u32,
+        failed_leader: NodeId,
+    ) -> Result<Option<NodeId>> {
         let mut partitions = self.partitions.write().await;
-        
+
         if let Some(replication) = partitions.get_mut(&partition) {
             if replication.leader == Some(failed_leader) {
                 replication.remove_replica(failed_leader);
@@ -344,7 +356,7 @@ impl ReplicationManager {
         in_sync: bool,
     ) -> Result<()> {
         let mut partitions = self.partitions.write().await;
-        
+
         if let Some(replication) = partitions.get_mut(&partition) {
             replication.update_replica_sync(node_id, sequence, in_sync);
         }
@@ -355,7 +367,7 @@ impl ReplicationManager {
     /// Add a new replica to a partition
     pub async fn add_replica(&self, partition: u32, node_id: NodeId) -> Result<()> {
         let mut partitions = self.partitions.write().await;
-        
+
         if let Some(replication) = partitions.get_mut(&partition) {
             // Only add if we don't have enough replicas
             if !replication.has_sufficient_replicas() {
@@ -364,7 +376,8 @@ impl ReplicationManager {
             }
         } else {
             // Create new replication if it doesn't exist
-            let mut replication = PartitionReplication::new(partition, self.default_replication_factor);
+            let mut replication =
+                PartitionReplication::new(partition, self.default_replication_factor);
             replication.add_replica(node_id, ReplicaRole::Leader);
             partitions.insert(partition, replication);
         }
@@ -375,7 +388,7 @@ impl ReplicationManager {
     /// Remove a replica from a partition
     pub async fn remove_replica(&self, partition: u32, node_id: NodeId) -> Result<()> {
         let mut partitions = self.partitions.write().await;
-        
+
         if let Some(replication) = partitions.get_mut(&partition) {
             replication.remove_replica(node_id);
             info!("Removed replica for partition {}: {:?}", partition, node_id);
@@ -389,12 +402,7 @@ impl ReplicationManager {
         let partitions = self.partitions.read().await;
         partitions
             .iter()
-            .filter(|(_, replication)| {
-                replication
-                    .replicas
-                    .iter()
-                    .any(|r| r.node_id == node_id)
-            })
+            .filter(|(_, replication)| replication.replicas.iter().any(|r| r.node_id == node_id))
             .map(|(partition, _)| *partition)
             .collect()
     }
@@ -454,7 +462,10 @@ mod tests {
             .await
             .unwrap();
 
-        manager.update_replica_sync(0, node2, 100, true).await.unwrap();
+        manager
+            .update_replica_sync(0, node2, 100, true)
+            .await
+            .unwrap();
 
         let replication = manager.get_partition_replication(0).await.unwrap();
         let replica = replication
@@ -466,4 +477,3 @@ mod tests {
         assert!(replica.in_sync);
     }
 }
-

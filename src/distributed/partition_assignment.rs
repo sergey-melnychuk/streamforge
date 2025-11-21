@@ -20,7 +20,11 @@ pub trait PartitionAssigner: Send + Sync {
     ) -> HashMap<NodeId, Vec<u32>>;
 
     /// Get the node responsible for a specific partition
-    fn get_node_for_partition(&self, partition: u32, assignment: &HashMap<NodeId, Vec<u32>>) -> Option<NodeId>;
+    fn get_node_for_partition(
+        &self,
+        partition: u32,
+        assignment: &HashMap<NodeId, Vec<u32>>,
+    ) -> Option<NodeId>;
 }
 
 /// Consistent hash ring for partition assignment
@@ -115,6 +119,7 @@ impl ConsistentHashAssigner {
     }
 
     /// Default configuration (100 virtual nodes, no replication)
+    #[allow(clippy::should_implement_trait)]
     pub fn default() -> Self {
         Self::new(100, 1)
     }
@@ -138,7 +143,7 @@ impl PartitionAssigner for ConsistentHashAssigner {
         // Assign each partition to nodes (with replication)
         for partition in 0..partitions {
             let hash = ring.hash_partition(partition);
-            
+
             // Get primary node (leader) - first node on the ring
             if let Some(primary_node) = ring.get_node(hash) {
                 assignment.get_mut(&primary_node).unwrap().push(partition);
@@ -147,33 +152,42 @@ impl PartitionAssigner for ConsistentHashAssigner {
                 if self.replication_factor > 1 && nodes.len() > 1 {
                     let mut replica_count = 1; // Already assigned primary
                     let mut seen_nodes = HashSet::new();
-                    
+
                     // Find the index of the primary node in the ring
-                    let primary_idx = ring.ring.iter().position(|(h, n)| {
-                        // Find the first node >= hash (wrapping around)
-                        *n == primary_node && *h >= hash
-                    }).unwrap_or_else(|| {
-                        // Fallback: find any node with this ID
-                        ring.ring.iter().position(|(_, n)| *n == primary_node).unwrap_or(0)
-                    });
-                    
+                    let primary_idx = ring
+                        .ring
+                        .iter()
+                        .position(|(h, n)| {
+                            // Find the first node >= hash (wrapping around)
+                            *n == primary_node && *h >= hash
+                        })
+                        .unwrap_or_else(|| {
+                            // Fallback: find any node with this ID
+                            ring.ring
+                                .iter()
+                                .position(|(_, n)| *n == primary_node)
+                                .unwrap_or(0)
+                        });
+
                     seen_nodes.insert(primary_node);
-                    
+
                     // Walk the ring to find next nodes for replicas
                     let mut current_idx = (primary_idx + 1) % ring.ring.len();
-                    while replica_count < self.replication_factor && replica_count < nodes.len() as u32 {
+                    while replica_count < self.replication_factor
+                        && replica_count < nodes.len() as u32
+                    {
                         if current_idx == primary_idx {
                             // Wrapped around, break
                             break;
                         }
-                        
+
                         let (_, next_node) = &ring.ring[current_idx];
                         if !seen_nodes.contains(next_node) {
                             assignment.get_mut(next_node).unwrap().push(partition);
                             seen_nodes.insert(*next_node);
                             replica_count += 1;
                         }
-                        
+
                         current_idx = (current_idx + 1) % ring.ring.len();
                     }
                 }
@@ -210,7 +224,11 @@ impl PartitionAssigner for ConsistentHashAssigner {
         new_assignment
     }
 
-    fn get_node_for_partition(&self, partition: u32, assignment: &HashMap<NodeId, Vec<u32>>) -> Option<NodeId> {
+    fn get_node_for_partition(
+        &self,
+        partition: u32,
+        assignment: &HashMap<NodeId, Vec<u32>>,
+    ) -> Option<NodeId> {
         for (node_id, partitions) in assignment {
             if partitions.contains(&partition) {
                 return Some(*node_id);
@@ -268,7 +286,11 @@ impl PartitionAssigner for RoundRobinAssigner {
         self.assign(partitions, nodes)
     }
 
-    fn get_node_for_partition(&self, partition: u32, assignment: &HashMap<NodeId, Vec<u32>>) -> Option<NodeId> {
+    fn get_node_for_partition(
+        &self,
+        partition: u32,
+        assignment: &HashMap<NodeId, Vec<u32>>,
+    ) -> Option<NodeId> {
         for (node_id, partitions) in assignment {
             if partitions.contains(&partition) {
                 return Some(*node_id);
@@ -336,10 +358,7 @@ mod tests {
     #[test]
     fn test_consistent_hash_get_node_for_partition() {
         let assigner = ConsistentHashAssigner::default();
-        let nodes = vec![
-            create_test_node(1, 8080),
-            create_test_node(2, 8081),
-        ];
+        let nodes = vec![create_test_node(1, 8080), create_test_node(2, 8081)];
 
         let assignment = assigner.assign(10, &nodes);
         let node = assigner.get_node_for_partition(0, &assignment);
@@ -371,10 +390,7 @@ mod tests {
     #[test]
     fn test_round_robin_uneven_distribution() {
         let assigner = RoundRobinAssigner::new();
-        let nodes = vec![
-            create_test_node(1, 8080),
-            create_test_node(2, 8081),
-        ];
+        let nodes = vec![create_test_node(1, 8080), create_test_node(2, 8081)];
 
         let assignment = assigner.assign(5, &nodes);
 
@@ -387,10 +403,7 @@ mod tests {
     #[test]
     fn test_rebalance_with_node_addition() {
         let assigner = ConsistentHashAssigner::default();
-        let initial_nodes = vec![
-            create_test_node(1, 8080),
-            create_test_node(2, 8081),
-        ];
+        let initial_nodes = vec![create_test_node(1, 8080), create_test_node(2, 8081)];
 
         let old_assignment = assigner.assign(10, &initial_nodes);
 

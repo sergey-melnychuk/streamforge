@@ -13,7 +13,7 @@ use tracing::{debug, trace};
 pub trait WatermarkStrategy: Send + Sync {
     /// Generate a watermark based on observed event timestamps
     fn generate_watermark(&self, timestamps: &[Timestamp]) -> Option<Watermark>;
-    
+
     /// Get the maximum out-of-orderness allowed (in milliseconds)
     fn max_out_of_orderness(&self) -> i64;
 }
@@ -57,7 +57,7 @@ impl PeriodicWatermarkGenerator {
 
         if let Some(new_watermark) = self.strategy.generate_watermark(timestamps) {
             let mut current = self.current_watermark.write().await;
-            
+
             // Only advance watermark (never go backwards)
             if new_watermark.timestamp() > current.timestamp() {
                 let old_timestamp = current.timestamp();
@@ -121,10 +121,10 @@ impl WatermarkStrategy for BoundedOutOfOrderStrategy {
 
         // Find the maximum timestamp (most recent event)
         let max_timestamp = timestamps.iter().max().copied()?;
-        
+
         // Watermark is max_timestamp - max_out_of_orderness
         let watermark_timestamp = max_timestamp.saturating_sub(self.max_out_of_orderness);
-        
+
         Some(Watermark::new(watermark_timestamp))
     }
 
@@ -154,13 +154,17 @@ impl PartitionedWatermarkTracker {
     }
 
     /// Update watermark for a specific partition
-    pub async fn update_partition(&self, partition: u32, event_timestamp: Timestamp) -> Option<Watermark> {
+    pub async fn update_partition(
+        &self,
+        partition: u32,
+        event_timestamp: Timestamp,
+    ) -> Option<Watermark> {
         let watermark_timestamp = event_timestamp.saturating_sub(self.max_out_of_orderness);
         let new_watermark = Watermark::new(watermark_timestamp);
 
         let mut watermarks = self.partition_watermarks.write().await;
         let partition_wm = watermarks.entry(partition).or_insert_with(Watermark::min);
-        
+
         // Only advance if new watermark is later
         if new_watermark.timestamp() > partition_wm.timestamp() {
             partition_wm.advance(new_watermark.timestamp());
@@ -259,4 +263,3 @@ mod tests {
         assert_eq!(global.timestamp(), 9000);
     }
 }
-

@@ -62,8 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     membership1.add_node(node3.clone());
 
     let transport1 = Transport::bind(node1_addr).await?;
-    let rpc_server1 = RpcServer::new(transport1.clone())
-        .with_membership(membership1.clone());
+    let rpc_server1 = RpcServer::new(transport1.clone()).with_membership(membership1.clone());
 
     // Start RPC server
     let server1_handle = tokio::spawn(async move {
@@ -73,7 +72,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     sleep(Duration::from_millis(200)).await;
-    println!("   ✓ Node 1 RPC server started on {}", transport1.local_addr());
+    println!(
+        "   ✓ Node 1 RPC server started on {}",
+        transport1.local_addr()
+    );
     println!();
 
     // ========================================================================
@@ -87,9 +89,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let assignment = assigner.assign(num_partitions, &nodes);
 
-    println!("   Assigning {} partitions across {} nodes:\n", num_partitions, nodes.len());
+    println!(
+        "   Assigning {} partitions across {} nodes:\n",
+        num_partitions,
+        nodes.len()
+    );
     for (node_id, partitions) in &assignment {
-        println!("   {}: partitions {:?} ({} total)", node_id, partitions, partitions.len());
+        println!(
+            "   {}: partitions {:?} ({} total)",
+            node_id,
+            partitions,
+            partitions.len()
+        );
     }
 
     let total: usize = assignment.values().map(|v| v.len()).sum();
@@ -112,7 +123,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("   New assignment with 4 nodes:\n");
     for (node_id, partitions) in &new_assignment {
-        println!("   {}: partitions {:?} ({} total)", node_id, partitions, partitions.len());
+        println!(
+            "   {}: partitions {:?} ({} total)",
+            node_id,
+            partitions,
+            partitions.len()
+        );
     }
 
     // Calculate movement
@@ -125,8 +141,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    println!("\n   Partitions moved: {} / {} ({:.1}%)", moved, num_partitions, 
-             (moved as f64 / num_partitions as f64) * 100.0);
+    println!(
+        "\n   Partitions moved: {} / {} ({:.1}%)",
+        moved,
+        num_partitions,
+        (moved as f64 / num_partitions as f64) * 100.0
+    );
     println!();
 
     // ========================================================================
@@ -141,19 +161,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(node) = assigner.get_node_for_partition(partition, &new_assignment) {
             let key = format!("partition:{}:state", partition);
             let value = format!("node:{}:data", node.as_u64());
-            
+
             state_backend.put(key.as_bytes(), value.into()).await?;
         }
     }
 
     println!("   Stored state for {} partitions", num_partitions);
-    
+
     // Query state for a specific partition
     let partition_key = b"partition:5:state";
     if let Some(value) = state_backend.get(partition_key).await? {
         if let Some(node) = assigner.get_node_for_partition(5, &new_assignment) {
-            println!("   Partition 5 state: {} (assigned to {})", 
-                     String::from_utf8_lossy(&value), node);
+            println!(
+                "   Partition 5 state: {} (assigned to {})",
+                String::from_utf8_lossy(&value),
+                node
+            );
         }
     }
 
@@ -180,7 +203,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("   Gossip interval: {:?}", gossip_config.gossip_interval);
     println!("   Gossip fanout: {}", gossip_config.gossip_fanout);
-    println!("   Heartbeat timeout: {:?}", gossip_config.heartbeat_timeout);
+    println!(
+        "   Heartbeat timeout: {:?}",
+        gossip_config.heartbeat_timeout
+    );
     println!("   Seed nodes: {}", gossip_config.seed_nodes.len());
     println!("   Network transport: enabled");
     println!();
@@ -193,18 +219,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   Cluster size: {} nodes", membership1.cluster_size());
     println!("   Total nodes: {}", membership1.node_count());
     println!("   Partitions: {}", num_partitions);
-    println!("   State backend: In-memory ({} keys)", partition_states.len());
+    println!(
+        "   State backend: In-memory ({} keys)",
+        partition_states.len()
+    );
     println!("   Network: TCP-based RPC and gossip");
     println!();
 
     println!("   Cluster topology:");
     for node in membership1.get_all_nodes() {
-        let assigned_partitions: Vec<u32> = new_assignment
-            .get(&node.id)
-            .cloned()
-            .unwrap_or_default();
-        println!("     {} @ {}: {} partitions", 
-                 node.id, node.address, assigned_partitions.len());
+        let assigned_partitions: Vec<u32> =
+            new_assignment.get(&node.id).cloned().unwrap_or_default();
+        println!(
+            "     {} @ {}: {} partitions",
+            node.id,
+            node.address,
+            assigned_partitions.len()
+        );
     }
     println!();
 
@@ -218,4 +249,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-

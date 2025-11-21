@@ -4,8 +4,6 @@
 
 use crate::core::event::Event;
 use crate::query::ast::*;
-use std::sync::Arc;
-use tokio::sync::mpsc;
 use tracing::{debug, info};
 
 /// Query execution result
@@ -32,7 +30,7 @@ impl QueryExecutor {
     }
 
     /// Execute the query against a stream
-    pub async fn execute<F>(&self, mut event_handler: F) -> QueryResult
+    pub async fn execute<F>(&self, _event_handler: F) -> QueryResult
     where
         F: FnMut(Event) -> Result<(), String>,
     {
@@ -79,12 +77,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_query_executor_filter() {
-        let query = Query::select("events")
-            .where_clause(Expression::binary_op(
-                Expression::field("temperature"),
-                BinaryOperator::Gt,
-                Expression::literal(Value::Integer(20)),
-            ));
+        let query = Query::select("events").where_clause(Expression::binary_op(
+            Expression::field("temperature"),
+            BinaryOperator::Gt,
+            Expression::literal(Value::Integer(20)),
+        ));
 
         let executor = QueryExecutor::new(query);
 
@@ -107,4 +104,3 @@ mod tests {
         assert!(!executor.matches_filter(&event));
     }
 }
-

@@ -2,10 +2,8 @@
 //!
 //! Reclaims space by removing obsolete entries
 
-use crate::storage::log::{AppendOnlyLog, LogError, LogResult};
+use crate::storage::log::{AppendOnlyLog, LogResult};
 use bytes::Bytes;
-use std::collections::HashMap;
-use std::path::PathBuf;
 use tracing::{debug, info};
 
 /// Compaction strategy
@@ -36,16 +34,20 @@ impl LogCompactor {
         info!("Starting log compaction...");
 
         let current_size = self.log.size().await?;
-        let mut compacted_size = 0;
 
         match self.strategy {
             CompactionStrategy::SizeBased { threshold_bytes } => {
                 if current_size < threshold_bytes {
-                    debug!("Log size {} < threshold {}, skipping compaction", current_size, threshold_bytes);
+                    debug!(
+                        "Log size {} < threshold {}, skipping compaction",
+                        current_size, threshold_bytes
+                    );
                     return Ok(0);
                 }
             }
-            CompactionStrategy::TimeBased { threshold_seconds: _ } => {
+            CompactionStrategy::TimeBased {
+                threshold_seconds: _,
+            } => {
                 // Time-based compaction would require timestamp tracking
                 // For now, we'll do a simple size-based approach
             }
@@ -55,7 +57,7 @@ impl LogCompactor {
         }
 
         // Create a set of keys to keep
-        let keep_set: std::collections::HashSet<Bytes> = keep_keys.iter().cloned().collect();
+        let _keep_set: std::collections::HashSet<Bytes> = keep_keys.iter().cloned().collect();
 
         // Read all entries and filter
         let mut entries_to_keep = Vec::new();
@@ -83,10 +85,12 @@ impl LogCompactor {
         }
 
         let new_size = self.log.size().await?;
-        compacted_size = current_size - new_size;
+        let compacted_size = current_size - new_size;
 
-        info!("Compaction complete: reclaimed {} bytes ({} -> {})", 
-              compacted_size, current_size, new_size);
+        info!(
+            "Compaction complete: reclaimed {} bytes ({} -> {})",
+            compacted_size, current_size, new_size
+        );
 
         Ok(compacted_size)
     }
@@ -127,4 +131,3 @@ mod tests {
         assert_eq!(stats.log_size_bytes, 0);
     }
 }
-

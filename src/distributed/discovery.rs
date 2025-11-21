@@ -57,25 +57,15 @@ impl Default for GossipConfig {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum GossipMessage {
     /// Announce presence to the cluster
-    Join {
-        node: NodeMetadata,
-    },
+    Join { node: NodeMetadata },
     /// Periodic heartbeat
-    Heartbeat {
-        node_id: NodeId,
-    },
+    Heartbeat { node_id: NodeId },
     /// Share membership view
-    MembershipDigest {
-        nodes: Vec<NodeMetadata>,
-    },
+    MembershipDigest { nodes: Vec<NodeMetadata> },
     /// Graceful departure
-    Leave {
-        node_id: NodeId,
-    },
+    Leave { node_id: NodeId },
     /// Acknowledge message receipt
-    Ack {
-        node_id: NodeId,
-    },
+    Ack { node_id: NodeId },
 }
 
 /// Gossip-based discovery implementation
@@ -101,10 +91,7 @@ impl GossipDiscovery {
     /// Create a new gossip discovery instance
     pub fn new(local_node: NodeMetadata, config: GossipConfig) -> Self {
         let (event_tx, event_rx) = mpsc::channel(100);
-        let membership = ClusterMembership::new(
-            local_node.id,
-            config.heartbeat_timeout.as_secs(),
-        );
+        let membership = ClusterMembership::new(local_node.id, config.heartbeat_timeout.as_secs());
 
         Self {
             local_node,
@@ -141,7 +128,8 @@ impl GossipDiscovery {
         alive_nodes.retain(|n| n.id != self.local_node.id);
 
         alive_nodes.shuffle(&mut rng);
-        alive_nodes.into_iter()
+        alive_nodes
+            .into_iter()
             .take(self.config.gossip_fanout)
             .collect()
     }
@@ -150,9 +138,7 @@ impl GossipDiscovery {
     #[allow(dead_code)] // TODO: remove this
     async fn process_message(&self, msg: GossipMessage) -> Option<MembershipEvent> {
         match msg {
-            GossipMessage::Join { node } => {
-                self.membership.add_node(node)
-            }
+            GossipMessage::Join { node } => self.membership.add_node(node),
             GossipMessage::Heartbeat { node_id } => {
                 self.membership.update_heartbeat(node_id);
                 None
@@ -190,9 +176,9 @@ impl GossipDiscovery {
             }
 
             // Check for dead nodes
-            let dead_events = self.membership.check_dead_nodes(
-                self.config.dead_timeout.as_secs()
-            );
+            let dead_events = self
+                .membership
+                .check_dead_nodes(self.config.dead_timeout.as_secs());
             for event in dead_events {
                 let _ = self.event_tx.send(event).await;
             }
@@ -231,9 +217,7 @@ impl GossipDiscovery {
                     let alive_nodes = self.membership.get_alive_nodes();
                     let digest_msg = Message::gossip(
                         self.local_node.id,
-                        GossipMessage::MembershipDigest {
-                            nodes: alive_nodes,
-                        },
+                        GossipMessage::MembershipDigest { nodes: alive_nodes },
                     );
 
                     let transport_clone = Arc::clone(transport);
@@ -258,7 +242,10 @@ impl GossipDiscovery {
     /// Bootstrap from seed nodes
     async fn bootstrap(&self) {
         if let Some(rpc_client) = &self.rpc_client {
-            info!("Bootstrapping from {} seed nodes", self.config.seed_nodes.len());
+            info!(
+                "Bootstrapping from {} seed nodes",
+                self.config.seed_nodes.len()
+            );
             for seed in &self.config.seed_nodes {
                 match rpc_client.join(*seed, self.local_node.clone()).await {
                     Ok(response) => {
@@ -286,7 +273,8 @@ impl GossipDiscovery {
 
 impl Discovery for GossipDiscovery {
     async fn start(&mut self) {
-        self.running.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.running
+            .store(true, std::sync::atomic::Ordering::Relaxed);
 
         // Bootstrap from seed nodes
         self.bootstrap().await;
@@ -299,11 +287,14 @@ impl Discovery for GossipDiscovery {
     }
 
     async fn stop(&mut self) {
-        self.running.store(false, std::sync::atomic::Ordering::Relaxed);
+        self.running
+            .store(false, std::sync::atomic::Ordering::Relaxed);
     }
 
     fn events(&mut self) -> mpsc::Receiver<MembershipEvent> {
-        self.event_rx.take().expect("events() can only be called once")
+        self.event_rx
+            .take()
+            .expect("events() can only be called once")
     }
 }
 
@@ -356,7 +347,9 @@ mod tests {
         let discovery = GossipDiscovery::new(local_node, config);
 
         let new_node = create_test_node(2, 8081);
-        let msg = GossipMessage::Join { node: new_node.clone() };
+        let msg = GossipMessage::Join {
+            node: new_node.clone(),
+        };
 
         let event = discovery.process_message(msg).await;
         assert!(matches!(event, Some(MembershipEvent::NodeJoined(_))));
@@ -372,7 +365,9 @@ mod tests {
         let new_node = create_test_node(2, 8081);
         discovery.membership().add_node(new_node.clone());
 
-        let msg = GossipMessage::Heartbeat { node_id: new_node.id };
+        let msg = GossipMessage::Heartbeat {
+            node_id: new_node.id,
+        };
         let event = discovery.process_message(msg).await;
 
         assert!(event.is_none());
@@ -387,7 +382,9 @@ mod tests {
 
         // Add some nodes
         for i in 2..6 {
-            discovery.membership().add_node(create_test_node(i, 8080 + i as u16));
+            discovery
+                .membership()
+                .add_node(create_test_node(i, 8080 + i as u16));
         }
 
         let targets = discovery.select_gossip_targets();

@@ -3,21 +3,23 @@
 //! Operators are composable transformations that can be applied to streams.
 //! Each operator implements the `StreamOperator` trait.
 
-pub mod filter;
-pub mod map;
-pub mod flatmap;
-pub mod window;
 pub mod aggregate;
+pub mod filter;
+pub mod flatmap;
 pub mod join;
+pub mod map;
 pub mod stateful;
+pub mod window;
 
+pub use aggregate::{AggregateFunction, Avg, Count, Max, Min, Sum};
 pub use filter::FilterOp;
-pub use map::MapOp;
 pub use flatmap::FlatMapOp;
-pub use window::{Window, WindowAssigner, WindowType, TumblingWindow, SlidingWindow, SessionWindow};
-pub use aggregate::{AggregateFunction, Sum, Count, Avg, Min, Max};
-pub use join::{JoinType, JoinState, JoinedEvent, TemporalConstraint};
-pub use stateful::{StatefulOperator, OperatorState, CountOperator};
+pub use join::{JoinState, JoinType, JoinedEvent, TemporalConstraint};
+pub use map::MapOp;
+pub use stateful::{CountOperator, OperatorState, StatefulOperator};
+pub use window::{
+    SessionWindow, SlidingWindow, TumblingWindow, Window, WindowAssigner, WindowType,
+};
 
 use crate::core::Event;
 use crate::error::Result;

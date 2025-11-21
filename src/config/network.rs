@@ -1,7 +1,6 @@
 //! Network configuration
 
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
 /// Network configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,9 +23,8 @@ impl Default for NetworkConfig {
             tcp_keepalive: 60,
             connection_timeout: 30,
             max_connections: 1000,
-            send_buffer_size: 64 * 1024,  // 64KB
-            recv_buffer_size: 64 * 1024,  // 64KB
+            send_buffer_size: 64 * 1024, // 64KB
+            recv_buffer_size: 64 * 1024, // 64KB
         }
     }
 }
-
