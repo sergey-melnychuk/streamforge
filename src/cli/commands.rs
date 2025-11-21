@@ -11,6 +11,9 @@ use tracing::{error, info};
 pub async fn submit_job(
     config_path: PathBuf,
     name: Option<String>,
+    daemon: bool,
+    max_restarts: u32,
+    restart_delay: u64,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("Submitting job from config: {:?}", config_path);
 
@@ -32,8 +35,15 @@ pub async fn submit_job(
     // Submit job
     let job_id = manager.submit_job(job_name, config).await?;
 
-    // Start job execution
-    let executor = JobExecutor::new(Arc::clone(&manager));
+    // Start job execution (with daemon mode if requested)
+    let executor = if daemon {
+        use std::time::Duration;
+        info!("Starting job in daemon mode (max restarts: {}, delay: {}s)", max_restarts, restart_delay);
+        JobExecutor::new_daemon(Arc::clone(&manager), max_restarts, Duration::from_secs(restart_delay))
+    } else {
+        JobExecutor::new(Arc::clone(&manager))
+    };
+    
     if let Err(e) = executor.start_job(&job_id).await {
         error!("Failed to start job: {}", e);
         return Err(e);
@@ -41,6 +51,9 @@ pub async fn submit_job(
 
     println!("✅ Job submitted and started successfully!");
     println!("   Job ID: {}", job_id);
+    if daemon {
+        println!("   Daemon mode: enabled (max restarts: {}, delay: {}s)", max_restarts, restart_delay);
+    }
     println!("   Use 'streamforge status {}' to check status", job_id);
 
     Ok(())

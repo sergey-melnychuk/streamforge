@@ -24,6 +24,9 @@ pub struct Config {
     pub network: network::NetworkConfig,
     /// Metrics configuration
     pub metrics: MetricsConfig,
+    /// Job definition (sources, operators, sinks)
+    #[serde(default)]
+    pub job: Option<JobDefinition>,
 }
 
 /// Stream processing configuration
@@ -69,6 +72,109 @@ impl Default for MetricsConfig {
             export_endpoint: None,
         }
     }
+}
+
+/// Job definition for stream processing pipeline
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobDefinition {
+    /// Source configuration
+    pub source: SourceConfig,
+    /// Sink configuration
+    pub sink: SinkConfig,
+    /// Optional operators to apply
+    #[serde(default)]
+    pub operators: Vec<OperatorConfig>,
+    /// Optional SQL query (alternative to operators)
+    #[serde(default)]
+    pub sql: Option<String>,
+}
+
+/// Source configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum SourceConfig {
+    /// File source
+    #[serde(rename = "file")]
+    File {
+        /// File path
+        path: String,
+        /// Format: "json", "csv", "text"
+        #[serde(default = "default_format")]
+        format: String,
+        /// Whether to read continuously (tail -f style)
+        #[serde(default)]
+        follow: bool,
+    },
+    /// HTTP source
+    #[serde(rename = "http")]
+    Http {
+        /// URLs to poll
+        urls: Vec<String>,
+        /// Polling interval in seconds
+        #[serde(default = "default_poll_interval")]
+        poll_interval: u64,
+        /// Request timeout in seconds
+        #[serde(default = "default_timeout")]
+        timeout: u64,
+        /// JSON path to extract value (e.g., "$.price")
+        #[serde(default)]
+        value_path: Option<String>,
+        /// JSON path to extract key (e.g., "$.symbol")
+        #[serde(default)]
+        key_path: Option<String>,
+    },
+}
+
+/// Sink configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum SinkConfig {
+    /// File sink
+    #[serde(rename = "file")]
+    File {
+        /// File path
+        path: String,
+        /// Format: "json", "csv", "text"
+        #[serde(default = "default_format")]
+        format: String,
+        /// Append to file (true) or overwrite (false)
+        #[serde(default = "default_append")]
+        append: bool,
+    },
+}
+
+/// Operator configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum OperatorConfig {
+    /// Filter operator (placeholder - filter logic would need to be defined)
+    #[serde(rename = "filter")]
+    Filter {
+        /// Filter expression (placeholder)
+        expression: String,
+    },
+    /// Map operator (placeholder - map logic would need to be defined)
+    #[serde(rename = "map")]
+    Map {
+        /// Map expression (placeholder)
+        expression: String,
+    },
+}
+
+fn default_format() -> String {
+    "json".to_string()
+}
+
+fn default_append() -> bool {
+    true
+}
+
+fn default_poll_interval() -> u64 {
+    1
+}
+
+fn default_timeout() -> u64 {
+    5
 }
 
 impl Config {

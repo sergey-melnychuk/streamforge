@@ -9,6 +9,7 @@ pub mod joined_stream;
 pub mod pipeline;
 pub mod shuffle;
 pub mod stream;
+pub mod streaming_windowed;
 pub mod watermarked_stream;
 pub mod windowed_stream;
 

@@ -7,7 +7,9 @@ use serde_json::Value as JsonValue;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
+use std::time::Duration;
 use tokio::task;
+use tokio::time::sleep;
 use tracing::error;
 
 /// File source configuration
@@ -152,6 +154,7 @@ impl Source for FileSource {
         let reader = self.reader.take()?;
         let config = self.config.clone();
         let line_number = self.line_number;
+        let follow = config.follow;
 
         let result = task::spawn_blocking(move || {
             let mut reader = reader;
@@ -159,8 +162,15 @@ impl Source for FileSource {
 
             match reader.read_line(&mut line) {
                 Ok(0) => {
-                    // EOF
-                    (None, Some(reader), true)
+                    // EOF - check if we should follow (tail -f style)
+                    if follow {
+                        // In follow mode, EOF doesn't mean exhausted
+                        // Return None but keep reader alive
+                        (None, Some(reader), false)
+                    } else {
+                        // Not following, EOF means exhausted
+                        (None, Some(reader), true)
+                    }
                 }
                 Ok(_) => {
                     // Got a line
@@ -185,6 +195,12 @@ impl Source for FileSource {
             Ok((event, reader, exhausted)) => {
                 self.reader = reader;
                 self.exhausted = exhausted;
+                
+                // If in follow mode and got EOF, wait a bit before next read
+                if follow && event.is_none() && !exhausted {
+                    sleep(Duration::from_millis(100)).await;
+                }
+                
                 event
             }
             Err(e) => {

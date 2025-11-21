@@ -52,7 +52,7 @@ impl QueryParser {
     #[allow(dead_code)]
     fn parse_from(_tokens: &[&str]) -> Result<FromClause, ParseError> {
         // TODO: Implement full FROM parsing
-        Ok(FromClause {
+        Ok(FromClause::Single {
             stream: "default_stream".to_string(),
             alias: None,
         })
@@ -66,6 +66,6 @@ mod tests {
     #[test]
     fn test_parse_basic_query() {
         let query = QueryParser::parse("SELECT * FROM events").unwrap();
-        assert_eq!(query.from.stream, "default_stream");
+        assert_eq!(query.from.primary_stream(), "default_stream");
     }
 }

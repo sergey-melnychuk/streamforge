@@ -26,6 +26,15 @@ enum Commands {
         /// Job name (optional, defaults to config filename)
         #[arg(short, long)]
         name: Option<String>,
+        /// Run in daemon mode (automatically restart on failure)
+        #[arg(long)]
+        daemon: bool,
+        /// Maximum restart attempts in daemon mode (default: 3)
+        #[arg(long, default_value = "3")]
+        max_restarts: u32,
+        /// Delay between restart attempts in seconds (default: 5)
+        #[arg(long, default_value = "5")]
+        restart_delay: u64,
     },
     /// List all running jobs
     List {
@@ -76,8 +85,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Submit { config, name } => {
-            submit_job(config, name).await?;
+        Commands::Submit { config, name, daemon, max_restarts, restart_delay } => {
+            submit_job(config, name, daemon, max_restarts, restart_delay).await?;
         }
         Commands::List { verbose } => {
             list_jobs(verbose).await?;

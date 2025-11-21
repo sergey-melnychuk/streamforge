@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info, span, Level};
+use tracing::{debug, error, info, span, warn, Level};
 
 /// Error type for RPC operations
 #[derive(Debug, thiserror::Error)]
@@ -533,6 +533,7 @@ impl RpcServer {
                 }
             }
             Some(RpcMethod::ExecuteOperator) => Self::handle_execute_operator(payload).await,
+            Some(RpcMethod::ExecuteQueryAggregation) => Self::handle_execute_query_aggregation(payload).await,
             Some(RpcMethod::ShuffleData) => Self::handle_shuffle_data(payload).await,
             Some(RpcMethod::ReplicateData) => Self::handle_replicate_data(payload).await,
             Some(RpcMethod::SyncReplica) => Self::handle_sync_replica(payload).await,
@@ -590,6 +591,78 @@ impl RpcServer {
 
         let payload =
             bincode::serialize(&response).map_err(|e| RpcError::Serialization(e.to_string()))?;
+        Ok(payload)
+    }
+
+    /// Handle execute query aggregation RPC
+    async fn handle_execute_query_aggregation(payload: &[u8]) -> RpcResult<Vec<u8>> {
+        use crate::network::protocol::{ExecuteQueryAggregationRequest, ExecuteQueryAggregationResponse};
+        use crate::query::{QueryExecutor, ast::Query};
+
+        let request: ExecuteQueryAggregationRequest =
+            bincode::deserialize(payload).map_err(|e| RpcError::Deserialization(e.to_string()))?;
+
+        debug!(
+            "Received query aggregation request: query_id={}, partition={}, events={}",
+            request.query_id,
+            request.partition,
+            request.events.len()
+        );
+
+        // Deserialize the query AST
+        let query: Query = bincode::deserialize(&request.query)
+            .map_err(|e| RpcError::Deserialization(format!("Failed to deserialize query: {}", e)))?;
+
+        // Create a local query executor (not distributed, since this is the remote node)
+        let executor = QueryExecutor::new(query);
+
+        // Apply WHERE filter if present
+        let filtered_events = if let Some(ref where_clause) = executor.query.where_clause {
+            request.events
+                .into_iter()
+                .filter(|event| {
+                    match where_clause.condition.evaluate(event) {
+                        crate::query::ast::Value::Boolean(b) => b,
+                        _ => false,
+                    }
+                })
+                .collect()
+        } else {
+            request.events
+        };
+
+        // Determine aggregation type and execute
+        let results = if let (Some(ref group_by), Some(ref aggregations)) = 
+            (&executor.query.group_by, &executor.query.aggregations) {
+            // Grouped aggregations
+            executor.execute_grouped_aggregations(filtered_events, group_by, aggregations)
+                .await
+                .map_err(|e| RpcError::Rpc(format!("Query execution error: {}", e)))?
+        } else if let Some(ref aggregations) = executor.query.aggregations {
+            // Global aggregations (no GROUP BY)
+            executor.execute_global_aggregations(filtered_events, aggregations)
+                .await
+                .map_err(|e| RpcError::Rpc(format!("Query execution error: {}", e)))?
+        } else {
+            // No aggregations - just return filtered events (shouldn't happen in practice)
+            warn!("Query aggregation request has no aggregations, returning filtered events");
+            filtered_events
+        };
+
+        debug!(
+            "Query aggregation completed: query_id={}, partition={}, results={}",
+            request.query_id,
+            request.partition,
+            results.len()
+        );
+
+        let response = ExecuteQueryAggregationResponse {
+            results,
+            partition: request.partition,
+        };
+
+        let payload = bincode::serialize(&response)
+            .map_err(|e| RpcError::Serialization(e.to_string()))?;
         Ok(payload)
     }
 

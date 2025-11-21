@@ -134,6 +134,10 @@ pub enum RpcMethod {
     SyncReplica,
     /// Promote replica to leader
     PromoteReplica,
+    /// Execute SQL query aggregation on remote node
+    ExecuteQueryAggregation,
+    /// Collect query results from remote node
+    CollectQueryResults,
 }
 
 impl RpcMethod {
@@ -152,6 +156,8 @@ impl RpcMethod {
             RpcMethod::ReplicateData => "replicate_data",
             RpcMethod::SyncReplica => "sync_replica",
             RpcMethod::PromoteReplica => "promote_replica",
+            RpcMethod::ExecuteQueryAggregation => "execute_query_aggregation",
+            RpcMethod::CollectQueryResults => "collect_query_results",
         }
     }
 
@@ -171,6 +177,8 @@ impl RpcMethod {
             "replicate_data" => Some(RpcMethod::ReplicateData),
             "sync_replica" => Some(RpcMethod::SyncReplica),
             "promote_replica" => Some(RpcMethod::PromoteReplica),
+            "execute_query_aggregation" => Some(RpcMethod::ExecuteQueryAggregation),
+            "collect_query_results" => Some(RpcMethod::CollectQueryResults),
             _ => None,
         }
     }
@@ -296,4 +304,42 @@ pub struct PromoteReplicaRequest {
 pub struct PromoteReplicaResponse {
     pub success: bool,
     pub message: String,
+}
+
+/// Request to execute query aggregation on remote node
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecuteQueryAggregationRequest {
+    /// Query ID for tracking
+    pub query_id: String,
+    /// Serialized query AST
+    pub query: Vec<u8>,
+    /// Events to aggregate
+    pub events: Vec<crate::core::Event>,
+    /// Partition ID (for tracking)
+    pub partition: u32,
+}
+
+/// Response from query aggregation execution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecuteQueryAggregationResponse {
+    /// Aggregated results
+    pub results: Vec<crate::core::Event>,
+    /// Partition ID
+    pub partition: u32,
+}
+
+/// Request to collect query results from remote node
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollectQueryResultsRequest {
+    /// Query ID
+    pub query_id: String,
+}
+
+/// Response with query results
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollectQueryResultsResponse {
+    /// Query results
+    pub results: Vec<crate::core::Event>,
+    /// Node ID that produced these results
+    pub node_id: crate::distributed::node::NodeId,
 }

@@ -63,12 +63,16 @@ impl Stream {
     {
         Self {
             inner: Box::pin(stream::unfold(source, |mut source| async move {
+                // Check if exhausted first
                 if source.is_exhausted() {
-                    None
-                } else {
-                    let event = source.read().await;
-                    event.map(|e| (e, source))
+                    return None;
                 }
+                
+                // Try to read an event
+                let event = source.read().await;
+                
+                // If we got an event, yield it; otherwise, the source is exhausted
+                event.map(|e| (e, source))
             })),
         }
     }
