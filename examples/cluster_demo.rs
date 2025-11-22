@@ -38,13 +38,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let node2_id = NodeId::new(2);
     let node3_id = NodeId::new(3);
 
-    let node1_addr: SocketAddr = "127.0.0.1:9001".parse()?;
-    let node2_addr: SocketAddr = "127.0.0.1:9002".parse()?;
-    let node3_addr: SocketAddr = "127.0.0.1:9003".parse()?;
+    // Use port 0 to get random available ports to avoid conflicts
+    let node1_addr: SocketAddr = "127.0.0.1:0".parse()?;
+    let node2_addr: SocketAddr = "127.0.0.1:0".parse()?;
+    let node3_addr: SocketAddr = "127.0.0.1:0".parse()?;
 
-    let node1 = NodeMetadata::new(node1_id, node1_addr);
-    let node2 = NodeMetadata::new(node2_id, node2_addr);
-    let node3 = NodeMetadata::new(node3_id, node3_addr);
+    // Bind transports to get actual addresses
+    let transport1_temp = Arc::new(Transport::bind(node1_addr).await?);
+    let transport2_temp = Arc::new(Transport::bind(node2_addr).await?);
+    let transport3_temp = Arc::new(Transport::bind(node3_addr).await?);
+    
+    let actual_node1_addr = transport1_temp.local_addr();
+    let actual_node2_addr = transport2_temp.local_addr();
+    let actual_node3_addr = transport3_temp.local_addr();
+    
+    // Drop temporary transports
+    drop(transport1_temp);
+    drop(transport2_temp);
+    drop(transport3_temp);
+    
+    let node1 = NodeMetadata::new(node1_id, actual_node1_addr);
+    let node2 = NodeMetadata::new(node2_id, actual_node2_addr);
+    let node3 = NodeMetadata::new(node3_id, actual_node3_addr);
 
     println!("   Node 1: {} @ {}", node1.id, node1.address);
     println!("   Node 2: {} @ {}", node2.id, node2.address);
@@ -61,8 +76,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     membership1.add_node(node2.clone());
     membership1.add_node(node3.clone());
 
-    let transport1 = Transport::bind(node1_addr).await?;
-    let rpc_server1 = RpcServer::new(transport1.clone()).with_membership(membership1.clone());
+    let transport1 = Arc::new(Transport::bind(actual_node1_addr).await?);
+    let transport1_for_discovery = Arc::clone(&transport1);
+    let rpc_server1 = RpcServer::new(Arc::clone(&transport1)).with_membership(membership1.clone());
 
     // Start RPC server
     let server1_handle = tokio::spawn(async move {
@@ -74,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     sleep(Duration::from_millis(200)).await;
     println!(
         "   ✓ Node 1 RPC server started on {}",
-        transport1.local_addr()
+        transport1_for_discovery.local_addr()
     );
     println!();
 
@@ -195,11 +211,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         gossip_fanout: 2,
         heartbeat_timeout: Duration::from_secs(10),
         dead_timeout: Duration::from_secs(30),
-        seed_nodes: vec![node2_addr, node3_addr],
+        seed_nodes: vec![actual_node2_addr, actual_node3_addr],
     };
 
     let mut discovery = GossipDiscovery::new(node1.clone(), gossip_config.clone())
-        .with_transport(Arc::new(transport1.clone()));
+        .with_transport(transport1_for_discovery);
 
     println!("   Gossip interval: {:?}", gossip_config.gossip_interval);
     println!("   Gossip fanout: {}", gossip_config.gossip_fanout);

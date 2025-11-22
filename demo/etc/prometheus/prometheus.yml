@@ -1,0 +1,34 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'streamforge-demo'
+    environment: 'development'
+
+# Scrape configurations
+scrape_configs:
+  # Ad Analytics job metrics
+  - job_name: 'ad-analytics'
+    static_configs:
+      - targets: ['host.docker.internal:9100']
+        labels:
+          application: 'ad-analytics'
+          component: 'streamforge-job'
+
+  # Price Oracle job metrics
+  - job_name: 'price-oracle'
+    static_configs:
+      - targets: ['host.docker.internal:9101']
+        labels:
+          application: 'price-oracle'
+          component: 'streamforge-job'
+
+  # Cluster nodes
+  - job_name: 'cluster-nodes'
+    static_configs:
+      - targets:
+          - 'host.docker.internal:9081'
+          - 'host.docker.internal:9082'
+          - 'host.docker.internal:9083'
+        labels:
+          component: 'cluster-node'

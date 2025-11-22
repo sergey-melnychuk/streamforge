@@ -1,0 +1,28 @@
+# Price Oracle Job Configuration
+# Streaming SQL query for aggregated price metrics
+
+[processing]
+parallelism = 4
+buffer_size = 1024
+backpressure_enabled = true
+batch_size = 50
+
+[job]
+source = { type = "http", urls = ["http://127.0.0.1:8092/event"], poll_interval = 1, timeout = 5, key_path = "$.symbol" }
+
+sql = """
+SELECT 
+    symbol,
+    MEDIAN(price) AS median_price,
+    AVG(price) AS mean_price,
+    MIN(price) AS min_price,
+    MAX(price) AS max_price,
+    SUM(volume) AS total_volume,
+    COUNT(*) AS num_sources
+FROM price_events
+GROUP BY symbol
+WINDOW TUMBLING 60 SECONDS
+"""
+
+sink = { type = "metrics", prefix = "oracle", http_endpoint = "127.0.0.1:9101" }
+

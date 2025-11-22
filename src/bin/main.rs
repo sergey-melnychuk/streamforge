@@ -35,25 +35,37 @@ enum Commands {
         /// Delay between restart attempts in seconds (default: 5)
         #[arg(long, default_value = "5")]
         restart_delay: u64,
+        /// Cluster nodes to try submitting to (host:port pairs, e.g., "127.0.0.1:9001,127.0.0.1:9002")
+        #[arg(long)]
+        nodes: Option<String>,
     },
     /// List all running jobs
     List {
         /// Show detailed information
         #[arg(short, long)]
         verbose: bool,
+        /// Cluster nodes to query (host:port pairs, e.g., "127.0.0.1:9001,127.0.0.1:9002")
+        #[arg(long)]
+        nodes: Option<String>,
     },
-    /// Show job status
+    /// Show node status
     Status {
-        /// Job ID
-        job_id: String,
+        /// Node ID (u64)
+        node_id: u64,
+        /// Cluster nodes to query for membership (host:port pairs, e.g., "127.0.0.1:9001,127.0.0.1:9002")
+        #[arg(long)]
+        nodes: Option<String>,
     },
-    /// Stop a running job
+    /// Stop a running node
     Stop {
-        /// Job ID
-        job_id: String,
+        /// Node ID (u64)
+        node_id: u64,
         /// Force stop (don't wait for graceful shutdown)
         #[arg(short, long)]
         force: bool,
+        /// Cluster nodes to query for membership (host:port pairs, e.g., "127.0.0.1:9001,127.0.0.1:9002")
+        #[arg(long)]
+        nodes: Option<String>,
     },
     /// Validate a job configuration file
     Validate {
@@ -64,6 +76,18 @@ enum Commands {
     Cluster {
         #[command(subcommand)]
         command: Option<ClusterCommands>,
+    },
+    /// Start a cluster node
+    Start {
+        /// Path to node configuration file
+        #[arg(short, long)]
+        config: PathBuf,
+    },
+    /// Check if cluster nodes are ready
+    Ready {
+        /// Cluster nodes to check (host:port pairs, e.g., "127.0.0.1:9001,127.0.0.1:9002")
+        #[arg(short, long)]
+        nodes: String,
     },
 }
 
@@ -85,17 +109,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Submit { config, name, daemon, max_restarts, restart_delay } => {
-            submit_job(config, name, daemon, max_restarts, restart_delay).await?;
+        Commands::Submit { config, name, daemon, max_restarts, restart_delay, nodes } => {
+            submit_job(config, name, daemon, max_restarts, restart_delay, nodes).await?;
         }
-        Commands::List { verbose } => {
-            list_jobs(verbose).await?;
+        Commands::List { verbose, nodes } => {
+            list_jobs(verbose, nodes).await?;
         }
-        Commands::Status { job_id } => {
-            show_status(&job_id).await?;
+        Commands::Status { node_id, nodes } => {
+            show_node_status(node_id, nodes).await?;
         }
-        Commands::Stop { job_id, force } => {
-            stop_job(&job_id, force).await?;
+        Commands::Stop { node_id, force, nodes } => {
+            stop_node(node_id, force, nodes).await?;
         }
         Commands::Validate { config } => {
             validate_config(config).await?;
@@ -108,6 +132,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 cluster_nodes().await?;
             }
         },
+        Commands::Start { config } => {
+            start_node(config).await?;
+        }
+        Commands::Ready { nodes } => {
+            check_nodes_ready(nodes).await?;
+        }
     }
 
     Ok(())

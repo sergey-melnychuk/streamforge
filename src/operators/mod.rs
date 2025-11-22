@@ -11,7 +11,7 @@ pub mod map;
 pub mod stateful;
 pub mod window;
 
-pub use aggregate::{AggregateFunction, Avg, Count, Max, Min, Sum};
+pub use aggregate::{AggregateFunction, Avg, Count, Max, Median, Min, Sum};
 pub use filter::FilterOp;
 pub use flatmap::FlatMapOp;
 pub use join::{JoinState, JoinType, JoinedEvent, TemporalConstraint};

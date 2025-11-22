@@ -4,9 +4,11 @@
 
 pub mod file;
 pub mod idempotent;
+pub mod metrics;
 
 pub use file::FileSink;
 pub use idempotent::IdempotentSink;
+pub use metrics::{MetricsSink, MetricsSinkConfig};
 
 use crate::core::Event;
 use async_trait::async_trait;

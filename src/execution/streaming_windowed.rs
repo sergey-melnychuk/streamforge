@@ -372,6 +372,7 @@ pub enum AggregationFunction {
     Avg(FieldAwareAgg<crate::operators::Avg>),
     Min(FieldAwareAgg<crate::operators::Min>),
     Max(FieldAwareAgg<crate::operators::Max>),
+    Median(FieldAwareAgg<crate::operators::Median>),
 }
 
 impl AggregationFunction {
@@ -384,13 +385,14 @@ impl AggregationFunction {
             AggregationFunction::Avg(_) => Ok(()),
             AggregationFunction::Min(_) => Ok(()),
             AggregationFunction::Max(_) => Ok(()),
+            AggregationFunction::Median(_) => Ok(()),
         }
     }
 }
 
 /// Helper to create aggregation function from AST
 pub fn create_aggregation_function(agg: &Aggregation) -> Result<AggregationFunction> {
-    use crate::operators::{Avg, Count, Max, Min, Sum};
+    use crate::operators::{Avg, Count, Max, Median, Min, Sum};
     
     match agg.function.to_uppercase().as_str() {
         "COUNT" => {
@@ -412,6 +414,10 @@ pub fn create_aggregation_function(agg: &Aggregation) -> Result<AggregationFunct
         "MAX" => {
             let max = Max::new();
             Ok(AggregationFunction::Max(FieldAwareAgg::new(max, agg.field.clone())))
+        }
+        "MEDIAN" => {
+            let median = Median::new();
+            Ok(AggregationFunction::Median(FieldAwareAgg::new(median, agg.field.clone())))
         }
         _ => {
             Err(crate::error::StreamError::ProcessingError(

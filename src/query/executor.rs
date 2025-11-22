@@ -8,10 +8,12 @@ use crate::execution::{DistributedContext, ShuffleManager, Stream};
 use crate::network::RpcClient;
 use crate::operators::{SessionWindow, SlidingWindow, TumblingWindow, WindowAssigner, join::{JoinType as OperatorJoinType, JoinState, JoinedEvent}};
 use crate::query::ast::*;
+use async_trait::async_trait;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::time::Instant;
 use tracing::{debug, info, warn};
 
 /// Query execution result
@@ -26,6 +28,107 @@ pub enum QueryExecutionError {
     StreamNotFound(String),
     #[error("Query error: {0}")]
     Query(String),
+}
+
+/// Helper trait for streaming aggregators (not object-safe, used via enum)
+trait StreamingAggregatorHelper: Send + Sync {
+    async fn process_event_helper(&self, event: &Event) -> crate::error::Result<()>;
+    async fn get_triggered_results_helper(&self) -> Vec<Event>;
+    async fn trigger_all_windows_helper(&self) -> crate::error::Result<Vec<Event>>;
+}
+
+/// Wrapper enum for different aggregation types (type erasure)
+/// Each variant can have a different window type
+enum StreamingAggregatorWrapper {
+    CountTumbling(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::TumblingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Count>>),
+    SumTumbling(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::TumblingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Sum>>),
+    AvgTumbling(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::TumblingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Avg>>),
+    MinTumbling(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::TumblingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Min>>),
+    MaxTumbling(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::TumblingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Max>>),
+    MedianTumbling(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::TumblingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Median>>),
+    CountSliding(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SlidingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Count>>),
+    SumSliding(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SlidingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Sum>>),
+    AvgSliding(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SlidingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Avg>>),
+    MinSliding(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SlidingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Min>>),
+    MaxSliding(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SlidingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Max>>),
+    MedianSliding(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SlidingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Median>>),
+    CountSession(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SessionWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Count>>),
+    SumSession(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SessionWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Sum>>),
+    AvgSession(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SessionWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Avg>>),
+    MinSession(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SessionWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Min>>),
+    MaxSession(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SessionWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Max>>),
+    MedianSession(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SessionWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Median>>),
+}
+
+impl StreamingAggregatorHelper for StreamingAggregatorWrapper {
+    async fn process_event_helper(&self, event: &Event) -> crate::error::Result<()> {
+        match self {
+            StreamingAggregatorWrapper::CountTumbling(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::CountSliding(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::CountSession(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::SumTumbling(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::SumSliding(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::SumSession(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::AvgTumbling(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::AvgSliding(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::AvgSession(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::MinTumbling(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::MinSliding(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::MinSession(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::MaxTumbling(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::MaxSliding(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::MaxSession(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::MedianTumbling(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::MedianSliding(agg) => agg.process_event(event).await,
+            StreamingAggregatorWrapper::MedianSession(agg) => agg.process_event(event).await,
+        }
+    }
+    
+    async fn get_triggered_results_helper(&self) -> Vec<Event> {
+        match self {
+            StreamingAggregatorWrapper::CountTumbling(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::CountSliding(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::CountSession(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::SumTumbling(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::SumSliding(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::SumSession(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::AvgTumbling(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::AvgSliding(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::AvgSession(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::MinTumbling(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::MinSliding(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::MinSession(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::MaxTumbling(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::MaxSliding(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::MaxSession(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::MedianTumbling(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::MedianSliding(agg) => agg.get_triggered_results().await,
+            StreamingAggregatorWrapper::MedianSession(agg) => agg.get_triggered_results().await,
+        }
+    }
+    
+    async fn trigger_all_windows_helper(&self) -> crate::error::Result<Vec<Event>> {
+        match self {
+            StreamingAggregatorWrapper::CountTumbling(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::CountSliding(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::CountSession(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::SumTumbling(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::SumSliding(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::SumSession(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::AvgTumbling(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::AvgSliding(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::AvgSession(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::MinTumbling(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::MinSliding(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::MinSession(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::MaxTumbling(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::MaxSliding(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::MaxSession(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::MedianTumbling(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::MedianSliding(agg) => agg.trigger_all_windows().await,
+            StreamingAggregatorWrapper::MedianSession(agg) => agg.trigger_all_windows().await,
+        }
+    }
 }
 
 /// Query executor that translates SQL queries to stream operations
@@ -91,20 +194,19 @@ impl QueryExecutor {
         if let Some(ref window_spec) = self.query.window {
             debug!("Applying windowing: {:?}", window_spec);
             
-            // For streaming windowed aggregations, we need to process events incrementally
-            // For now, we still collect events but this can be optimized to true streaming
-            let events: Vec<Event> = stream.collect().await
-                .map_err(|e| QueryExecutionError::Execution(format!("Failed to collect events: {}", e)))?;
-            
-            // Apply windowing - distributed if enabled
-            let windowed_events = if self.is_distributed() {
-                self.apply_distributed_windowed_aggregations(events, window_spec).await?
+            // For streaming windowed aggregations, process events incrementally
+            // This allows continuous processing without blocking on stream.collect()
+            if self.is_distributed() {
+                // Distributed mode: collect events for shuffling
+                let events: Vec<Event> = stream.collect().await
+                    .map_err(|e| QueryExecutionError::Execution(format!("Failed to collect events: {}", e)))?;
+                let windowed_events = self.apply_distributed_windowed_aggregations(events, window_spec).await?;
+                stream = Stream::from_iter(windowed_events);
             } else {
-                // Use streaming windowed aggregations for better performance
-                self.apply_streaming_windowed_aggregations(events, window_spec).await?
-            };
-            
-            stream = Stream::from_iter(windowed_events);
+                // Local mode: process events in time-based batches for windowed aggregations
+                // This allows continuous processing without blocking on stream.collect()
+                stream = self.execute_streaming_windowed_incremental(stream, window_spec).await?;
+            }
         } else if self.query.aggregations.is_some() || self.query.group_by.is_some() {
             // Aggregations without windowing require batch processing
             debug!("Aggregations require batch processing");
@@ -395,6 +497,495 @@ impl QueryExecutor {
         }
     }
     
+    /// Execute streaming windowed aggregations incrementally (processes events as they arrive)
+    async fn execute_streaming_windowed_incremental(
+        &self,
+        input_stream: Stream,
+        window_spec: &WindowSpec,
+    ) -> std::result::Result<Stream, QueryExecutionError> {
+        use crate::execution::streaming_windowed::StreamingWindowConfig;
+        use crate::execution::streaming_windowed::{FieldAwareAgg, StreamingWindowedAggregator};
+        use crate::operators::{Avg, Count, Max, Median, Min, Sum, SessionWindow, SlidingWindow, TumblingWindow};
+        use std::time::Duration;
+        
+        // Get aggregations - required for windowed aggregations
+        let aggregations = self.query.aggregations.as_ref()
+            .ok_or_else(|| QueryExecutionError::Query("Windowed aggregations require aggregation functions".to_string()))?;
+        
+        if aggregations.len() != 1 {
+            // For multiple aggregations with GROUP BY, process events in time-based batches
+            // Instead of collecting all events (which hangs with HttpSource), process in batches
+            warn!("Multiple aggregations in windowed query - processing in time-based batches");
+            
+            // Get window size in seconds
+            let window_secs = match window_spec.size {
+                WindowSize::Time(secs) => secs,
+                _ => 60, // Default to 60 seconds
+            };
+            
+            // Use a simpler approach: process events in time windows using a custom sink
+            // that batches and processes windowed aggregations
+            let (result_tx, result_rx) = tokio::sync::mpsc::channel(1000);
+            let window_spec_clone = window_spec.clone();
+            let query_clone = self.query.clone();
+            
+            // Create a sink that batches events and processes them in time windows
+            // Use Arc<Mutex> to share batch state between the sink and periodic processor
+            use std::sync::Arc;
+            use tokio::sync::Mutex;
+            
+            struct WindowedBatchSink {
+                batch: Arc<Mutex<Vec<Event>>>,
+                last_batch_time: Arc<Mutex<Instant>>,
+                window_secs: u64,
+                window_spec: WindowSpec,
+                query: Query,
+                result_tx: tokio::sync::mpsc::Sender<Event>,
+            }
+            
+            impl WindowedBatchSink {
+                async fn process_batch(&self) {
+                    let mut batch = self.batch.lock().await;
+                    if batch.is_empty() {
+                        debug!("WindowedBatchSink: batch is empty, skipping");
+                        return;
+                    }
+                    
+                    let batch_size = batch.len();
+                    info!("WindowedBatchSink: processing batch of {} events", batch_size);
+                    let events = batch.clone();
+                    batch.clear();
+                    drop(batch);
+                    
+                    let mut last_time = self.last_batch_time.lock().await;
+                    *last_time = Instant::now();
+                    drop(last_time);
+                    
+                    let executor = QueryExecutor::new(self.query.clone());
+                    match executor.apply_windowed_aggregations(events, &self.window_spec).await {
+                        Ok(windowed_events) => {
+                            info!("WindowedBatchSink: produced {} windowed events", windowed_events.len());
+                            for event in windowed_events {
+                                if let Err(e) = self.result_tx.send(event).await {
+                                    warn!("WindowedBatchSink: failed to send event to result channel: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to process windowed batch: {}", e);
+                        }
+                    }
+                }
+            }
+            
+            #[async_trait::async_trait]
+            impl crate::sinks::Sink for WindowedBatchSink {
+                async fn write(&mut self, event: Event) -> Result<(), crate::sinks::SinkError> {
+                    {
+                        let mut batch = self.batch.lock().await;
+                        batch.push(event);
+                        debug!("WindowedBatchSink: received event, batch size now: {}", batch.len());
+                    }
+                    
+                    // Check if we should process batch now
+                    let should_process = {
+                        let last_time = self.last_batch_time.lock().await;
+                        last_time.elapsed().as_secs() >= self.window_secs
+                    };
+                    
+                    if should_process {
+                        info!("WindowedBatchSink: window time elapsed, processing batch");
+                        self.process_batch().await;
+                    }
+                    
+                    Ok(())
+                }
+                
+                async fn flush(&mut self) -> Result<(), crate::sinks::SinkError> {
+                    self.process_batch().await;
+                    Ok(())
+                }
+                
+                async fn close(&mut self) -> Result<(), crate::sinks::SinkError> {
+                    self.process_batch().await;
+                    Ok(())
+                }
+            }
+            
+            let batch = Arc::new(Mutex::new(Vec::<Event>::new()));
+            let last_batch_time = Arc::new(Mutex::new(Instant::now()));
+            
+            let sink = WindowedBatchSink {
+                batch: batch.clone(),
+                last_batch_time: last_batch_time.clone(),
+                window_secs,
+                window_spec: window_spec_clone.clone(),
+                query: query_clone.clone(),
+                result_tx: result_tx.clone(),
+            };
+            
+            // Spawn periodic task to process batches every window_secs
+            let batch_for_periodic = batch.clone();
+            let last_batch_time_for_periodic = last_batch_time.clone();
+            let window_secs_for_periodic = window_secs;
+            let query_for_periodic = query_clone.clone();
+            let window_spec_for_periodic = window_spec_clone.clone();
+            let result_tx_for_periodic = result_tx.clone();
+            
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(window_secs_for_periodic));
+                // Skip the first tick (it fires immediately)
+                interval.tick().await;
+                
+                loop {
+                    interval.tick().await;
+                    info!("WindowedBatchSink: periodic tick, checking for batch to process");
+                    
+                    // Check if we should process batch
+                    let should_process = {
+                        let last_time = last_batch_time_for_periodic.lock().await;
+                        last_time.elapsed().as_secs() >= window_secs_for_periodic
+                    };
+                    
+                    if should_process {
+                        let mut batch_guard = batch_for_periodic.lock().await;
+                        if !batch_guard.is_empty() {
+                            let batch_size = batch_guard.len();
+                            info!("WindowedBatchSink: periodic processing batch of {} events", batch_size);
+                            let events = batch_guard.clone();
+                            batch_guard.clear();
+                            drop(batch_guard);
+                            
+                            let mut last_time = last_batch_time_for_periodic.lock().await;
+                            *last_time = Instant::now();
+                            drop(last_time);
+                            
+                            let executor = QueryExecutor::new(query_for_periodic.clone());
+                            match executor.apply_windowed_aggregations(events, &window_spec_for_periodic).await {
+                                Ok(windowed_events) => {
+                                    info!("WindowedBatchSink: periodic processing produced {} windowed events", windowed_events.len());
+                                    for event in windowed_events {
+                                        if let Err(e) = result_tx_for_periodic.send(event).await {
+                                            warn!("WindowedBatchSink: failed to send event to result channel: {}", e);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!("Failed to process windowed batch: {}", e);
+                                }
+                            }
+                        } else {
+                            debug!("WindowedBatchSink: periodic tick, but batch is empty");
+                        }
+                    } else {
+                        debug!("WindowedBatchSink: periodic tick, but window time hasn't elapsed yet");
+                    }
+                }
+            });
+            
+            // Spawn task to process stream through sink
+            tokio::spawn(async move {
+                if let Err(e) = input_stream.sink(sink).await {
+                    warn!("Error processing stream through windowed batch sink: {}", e);
+                }
+            });
+            
+            return Ok(Stream::from_channel(result_rx));
+        }
+        
+        let agg = &aggregations[0];
+        let config = StreamingWindowConfig::default();
+        
+        // Create aggregator based on window type and aggregation function
+        // We'll process events incrementally using for_each
+        let (result_tx, result_rx) = tokio::sync::mpsc::unbounded_channel();
+        
+        // Spawn task to process events incrementally
+        let window_spec_clone = window_spec.clone();
+        let agg_clone = agg.clone();
+        let input_stream_for_task = input_stream; // Move stream into task
+        
+        tokio::spawn(async move {
+            // Create aggregator based on window type
+            // We'll use the enum directly instead of trait objects (async traits aren't object-safe)
+            let aggregator: StreamingAggregatorWrapper = match window_spec_clone.window_type {
+                WindowType::Tumbling => {
+                    match window_spec_clone.size {
+                        WindowSize::Time(secs) => {
+                            let assigner = TumblingWindow::of(Duration::from_secs(secs));
+                            match agg_clone.function.to_uppercase().as_str() {
+                                "COUNT" => {
+                                    let agg_fn = FieldAwareAgg::new(Count::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::CountTumbling(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                "SUM" => {
+                                    let agg_fn = FieldAwareAgg::new(Sum::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::SumTumbling(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                "AVG" => {
+                                    let agg_fn = FieldAwareAgg::new(Avg::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::AvgTumbling(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                "MIN" => {
+                                    let agg_fn = FieldAwareAgg::new(Min::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::MinTumbling(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                "MAX" => {
+                                    let agg_fn = FieldAwareAgg::new(Max::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::MaxTumbling(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                "MEDIAN" => {
+                                    let agg_fn = FieldAwareAgg::new(Median::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::MedianTumbling(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                _ => {
+                                    warn!("Unsupported aggregation: {}, falling back to batch mode", agg_clone.function);
+                                    // Fall back to batch processing
+                                    let events: Vec<Event> = input_stream_for_task.collect().await.unwrap_or_default();
+                                    // Send events as individual results (fallback)
+                                    for event in events {
+                                        let _ = result_tx.send(event);
+                                    }
+                                    return;
+                                }
+                            }
+                        }
+                        WindowSize::Count(_) => {
+                            warn!("Count-based windows not supported, falling back to batch mode");
+                            let events: Vec<Event> = input_stream_for_task.collect().await.unwrap_or_default();
+                            for event in events {
+                                let _ = result_tx.send(event);
+                            }
+                            return;
+                        }
+                    }
+                }
+                WindowType::Sliding => {
+                    match window_spec_clone.size {
+                        WindowSize::Time(secs) => {
+                            let slide = Duration::from_secs(secs / 2);
+                            let assigner = SlidingWindow::of(Duration::from_secs(secs), slide);
+                            match agg_clone.function.to_uppercase().as_str() {
+                                "COUNT" => {
+                                    let agg_fn = FieldAwareAgg::new(Count::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::CountSliding(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                "SUM" => {
+                                    let agg_fn = FieldAwareAgg::new(Sum::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::SumSliding(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                "AVG" => {
+                                    let agg_fn = FieldAwareAgg::new(Avg::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::AvgSliding(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                "MIN" => {
+                                    let agg_fn = FieldAwareAgg::new(Min::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::MinSliding(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                "MAX" => {
+                                    let agg_fn = FieldAwareAgg::new(Max::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::MaxSliding(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                "MEDIAN" => {
+                                    let agg_fn = FieldAwareAgg::new(Median::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::MedianSliding(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                _ => {
+                                    warn!("Unsupported aggregation: {}, falling back to batch mode", agg_clone.function);
+                                    let events: Vec<Event> = input_stream_for_task.collect().await.unwrap_or_default();
+                                    for event in events {
+                                        let _ = result_tx.send(event);
+                                    }
+                                    return;
+                                }
+                            }
+                        }
+                        WindowSize::Count(_) => {
+                            warn!("Count-based windows not supported, falling back to batch mode");
+                            let events: Vec<Event> = input_stream_for_task.collect().await.unwrap_or_default();
+                            for event in events {
+                                let _ = result_tx.send(event);
+                            }
+                            return;
+                        }
+                    }
+                }
+                WindowType::Session => {
+                    match window_spec_clone.size {
+                        WindowSize::Time(secs) => {
+                            let assigner = SessionWindow::with_gap(Duration::from_secs(secs));
+                            match agg_clone.function.to_uppercase().as_str() {
+                                "COUNT" => {
+                                    let agg_fn = FieldAwareAgg::new(Count::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::CountSession(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                "SUM" => {
+                                    let agg_fn = FieldAwareAgg::new(Sum::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::SumSession(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                "AVG" => {
+                                    let agg_fn = FieldAwareAgg::new(Avg::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::AvgSession(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                "MIN" => {
+                                    let agg_fn = FieldAwareAgg::new(Min::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::MinSession(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                "MAX" => {
+                                    let agg_fn = FieldAwareAgg::new(Max::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::MaxSession(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                "MEDIAN" => {
+                                    let agg_fn = FieldAwareAgg::new(Median::new(), agg_clone.field.clone());
+                                    StreamingAggregatorWrapper::MedianSession(
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                    )
+                                }
+                                _ => {
+                                    warn!("Unsupported aggregation: {}, falling back to batch mode", agg_clone.function);
+                                    let events: Vec<Event> = input_stream_for_task.collect().await.unwrap_or_default();
+                                    for event in events {
+                                        let _ = result_tx.send(event);
+                                    }
+                                    return;
+                                }
+                            }
+                        }
+                        WindowSize::Count(_) => {
+                            warn!("Count-based windows not supported, falling back to batch mode");
+                            let events: Vec<Event> = input_stream_for_task.collect().await.unwrap_or_default();
+                            for event in events {
+                                let _ = result_tx.send(event);
+                            }
+                            return;
+                        }
+                    }
+                }
+            };
+            
+            // Process events incrementally as they arrive
+            // Use Stream::sink() which processes events asynchronously
+            // Create a custom sink that processes events through the aggregator
+            let aggregator_arc = Arc::new(aggregator);
+            let result_tx_for_sink = result_tx.clone();
+            
+            // Create a sink that processes events through the aggregator
+            // We'll use the enum directly since async traits aren't object-safe
+            struct AggregatorSink {
+                aggregator: Arc<StreamingAggregatorWrapper>,
+                result_tx: tokio::sync::mpsc::UnboundedSender<Event>,
+            }
+            
+            #[async_trait]
+            impl crate::sinks::Sink for AggregatorSink {
+                async fn write(&mut self, event: Event) -> Result<(), crate::sinks::SinkError> {
+                    match self.aggregator.process_event_helper(&event).await {
+                        Ok(_) => {
+                            // Get and emit triggered results
+                            let results = self.aggregator.get_triggered_results_helper().await;
+                            for result in results {
+                                if self.result_tx.send(result).is_err() {
+                                    return Err(crate::sinks::SinkError::Other("Result channel closed".to_string()));
+                                }
+                            }
+                            Ok(())
+                        }
+                        Err(err) => {
+                            warn!("Error processing event in streaming aggregator: {}", err);
+                            Ok(()) // Continue processing other events
+                        }
+                    }
+                }
+                
+                async fn flush(&mut self) -> Result<(), crate::sinks::SinkError> {
+                    Ok(())
+                }
+                
+                async fn close(&mut self) -> Result<(), crate::sinks::SinkError> {
+                    // Trigger final windows
+                    match self.aggregator.trigger_all_windows_helper().await {
+                        Ok(final_results) => {
+                            for result in final_results {
+                                let _ = self.result_tx.send(result);
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Error triggering final windows: {}", e);
+                        }
+                    }
+                    Ok(())
+                }
+            }
+            
+            let sink = AggregatorSink {
+                aggregator: aggregator_arc.clone(),
+                result_tx: result_tx_for_sink.clone(),
+            };
+            
+            // Process stream through aggregator sink in a spawned task
+            // This allows the function to return immediately with the result stream
+            tokio::spawn(async move {
+                if let Err(e) = input_stream_for_task.sink(sink).await {
+                    warn!("Error processing stream through aggregator sink: {}", e);
+                }
+                
+                // Trigger final windows (in case close wasn't called)
+                let final_results = aggregator_arc.trigger_all_windows_helper().await.unwrap_or_default();
+                for result in final_results {
+                    let _ = result_tx_for_sink.send(result);
+                }
+            });
+        });
+        
+        // Convert UnboundedReceiver to Receiver for Stream::from_channel
+        let (bounded_tx, bounded_rx) = tokio::sync::mpsc::channel(1000);
+        tokio::spawn(async move {
+            let mut rx = result_rx;
+            while let Some(event) = rx.recv().await {
+                if bounded_tx.send(event).await.is_err() {
+                    break;
+                }
+            }
+        });
+        
+        // Return stream of results
+        Ok(Stream::from_channel(bounded_rx))
+    }
+    
     /// Execute streaming windowed aggregation with specific window assigner and aggregation type
     async fn execute_streaming_windowed_with_agg<W: WindowAssigner + 'static>(
         &self,
@@ -404,7 +995,7 @@ impl QueryExecutor {
         config: crate::execution::streaming_windowed::StreamingWindowConfig,
     ) -> std::result::Result<Vec<Event>, QueryExecutionError> {
         use crate::execution::streaming_windowed::{FieldAwareAgg, StreamingWindowedAggregator};
-        use crate::operators::{Avg, Count, Max, Min, Sum};
+        use crate::operators::{Avg, Count, Max, Median, Min, Sum};
         
         // Create the appropriate aggregation function based on type
         match agg.function.to_uppercase().as_str() {
@@ -435,6 +1026,12 @@ impl QueryExecutor {
             "MAX" => {
                 let max = Max::new();
                 let agg_fn = FieldAwareAgg::new(max, agg.field.clone());
+                let aggregator = StreamingWindowedAggregator::new(assigner, agg_fn, config);
+                self.process_streaming_aggregator(aggregator, events, agg).await
+            }
+            "MEDIAN" => {
+                let median = Median::new();
+                let agg_fn = FieldAwareAgg::new(median, agg.field.clone());
                 let aggregator = StreamingWindowedAggregator::new(assigner, agg_fn, config);
                 self.process_streaming_aggregator(aggregator, events, agg).await
             }

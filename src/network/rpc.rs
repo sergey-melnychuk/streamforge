@@ -270,7 +270,7 @@ impl RpcClient {
 
 /// RPC server for handling requests from remote nodes
 pub struct RpcServer {
-    transport: Transport,
+    transport: Arc<Transport>,
     handlers: Arc<Mutex<HashMap<String, RpcHandler>>>,
     membership: Option<Arc<ClusterMembership>>,
     raft: Option<Arc<crate::distributed::consensus::Raft>>,
@@ -278,7 +278,7 @@ pub struct RpcServer {
 
 impl RpcServer {
     /// Create a new RPC server
-    pub fn new(transport: Transport) -> Self {
+    pub fn new(transport: Arc<Transport>) -> Self {
         Self {
             transport,
             handlers: Arc::new(Mutex::new(HashMap::new())),
@@ -307,12 +307,18 @@ impl RpcServer {
 
     /// Start the RPC server
     pub async fn start(&self) -> RpcResult<()> {
-        let _listener = self
+        // Verify listener exists and get a reference to keep it alive
+        let listener_ref = self
             .transport
             .listener()
             .ok_or(RpcError::Transport(TransportError::ConnectionClosed))?;
 
-        info!("RPC server started on {}", self.transport.local_addr());
+        let bind_addr = self.transport.local_addr();
+        info!("RPC server started on {} (listener ready)", bind_addr);
+
+        // Keep listener reference alive by storing it
+        // The transport's listener is stored in Arc, so this reference keeps it alive
+        let _listener_keepalive = listener_ref;
 
         loop {
             match self.transport.accept().await {
@@ -323,7 +329,7 @@ impl RpcServer {
 
                     tokio::spawn(async move {
                         // Create a minimal server instance for handling the connection
-                        // We only need handlers, membership, and raft, not the full transport
+                        // We only need handlers, membership, and raft
                         if let Err(e) =
                             Self::handle_connection_static(handlers, membership, raft, conn).await
                         {
@@ -333,6 +339,7 @@ impl RpcServer {
                 }
                 Err(e) => {
                     error!("Error accepting connection: {}", e);
+                    // Continue accepting - don't exit on individual connection errors
                 }
             }
         }
@@ -809,11 +816,11 @@ mod tests {
     async fn test_rpc_join() {
         // Create server transport
         let server_addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
-        let server_transport = Transport::bind(server_addr).await.unwrap();
+        let server_transport = Arc::new(Transport::bind(server_addr).await.unwrap());
         let server_addr = server_transport.local_addr();
 
         let membership = Arc::new(ClusterMembership::new(NodeId::new(1), 30));
-        let server = RpcServer::new(server_transport).with_membership(membership.clone());
+        let server = RpcServer::new(Arc::clone(&server_transport)).with_membership(membership.clone());
 
         // Start server in background
         let server_handle = tokio::spawn(async move {
@@ -844,7 +851,7 @@ mod tests {
     async fn test_rpc_get_membership() {
         // Create server transport
         let server_addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
-        let server_transport = Transport::bind(server_addr).await.unwrap();
+        let server_transport = Arc::new(Transport::bind(server_addr).await.unwrap());
         let server_addr = server_transport.local_addr();
 
         let membership = Arc::new(ClusterMembership::new(NodeId::new(1), 30));
@@ -852,7 +859,7 @@ mod tests {
         membership.add_node(create_test_node(2, 8081));
         membership.add_node(create_test_node(3, 8082));
 
-        let server = RpcServer::new(server_transport).with_membership(membership.clone());
+        let server = RpcServer::new(Arc::clone(&server_transport)).with_membership(membership.clone());
 
         // Start server in background
         let server_handle = tokio::spawn(async move {
@@ -881,11 +888,11 @@ mod tests {
     async fn test_rpc_method_not_found() {
         // Create server transport
         let server_addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
-        let server_transport = Transport::bind(server_addr).await.unwrap();
+        let server_transport = Arc::new(Transport::bind(server_addr).await.unwrap());
         let server_addr = server_transport.local_addr();
 
         let membership = Arc::new(ClusterMembership::new(NodeId::new(1), 30));
-        let server = RpcServer::new(server_transport).with_membership(membership);
+        let server = RpcServer::new(Arc::clone(&server_transport)).with_membership(membership);
 
         // Start server in background
         let server_handle = tokio::spawn(async move {

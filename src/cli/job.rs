@@ -160,6 +160,18 @@ impl JobManager {
         name: String,
         config: Config,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        // Check if a job with the same name is already running
+        let jobs = self.jobs.read().await;
+        for (existing_id, existing_job) in jobs.iter() {
+            if existing_job.name == name {
+                use crate::cli::job::JobStatus;
+                if matches!(existing_job.status, JobStatus::Running) {
+                    return Err(format!("Job with name '{}' is already running (ID: {})", name, existing_id).into());
+                }
+            }
+        }
+        drop(jobs);
+
         let job = Job::new(name, config);
         let job_id = job.id.clone();
 

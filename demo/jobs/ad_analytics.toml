@@ -1,0 +1,24 @@
+# Ad Analytics Job Configuration
+# Streaming SQL query for campaign performance metrics
+
+[processing]
+parallelism = 4
+buffer_size = 1024
+backpressure_enabled = true
+batch_size = 100
+
+[job]
+source = { type = "http", urls = ["http://127.0.0.1:8091/event"], poll_interval = 1, timeout = 5, key_path = "$.campaign_id" }
+
+sql = """
+SELECT 
+    campaign_id,
+    COUNT(*) AS event_count,
+    SUM(cost) AS total_cost,
+    AVG(cost) AS avg_cost
+FROM ad_events
+GROUP BY campaign_id
+WINDOW TUMBLING 60 SECONDS
+"""
+
+sink = { type = "metrics", prefix = "ad", http_endpoint = "127.0.0.1:9100" }

@@ -141,6 +141,16 @@ pub enum SinkConfig {
         #[serde(default = "default_append")]
         append: bool,
     },
+    /// Metrics sink (Prometheus format)
+    #[serde(rename = "metrics")]
+    Metrics {
+        /// Metric name prefix
+        #[serde(default = "default_metric_prefix")]
+        prefix: String,
+        /// HTTP endpoint to expose metrics (e.g., "127.0.0.1:9090")
+        #[serde(default)]
+        http_endpoint: Option<String>,
+    },
 }
 
 /// Operator configuration
@@ -175,6 +185,10 @@ fn default_poll_interval() -> u64 {
 
 fn default_timeout() -> u64 {
     5
+}
+
+fn default_metric_prefix() -> String {
+    "streamforge".to_string()
 }
 
 impl Config {

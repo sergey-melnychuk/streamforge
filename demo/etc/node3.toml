@@ -1,0 +1,14 @@
+[cluster]
+node_id = 3
+bind_address = "127.0.0.1:9003"
+seed_nodes = ["127.0.0.1:9001", "127.0.0.1:9002"]
+
+[processing]
+parallelism = 4
+buffer_size = 1024
+
+[metrics]
+enabled = true
+export_interval = 10
+export_endpoint = "127.0.0.1:9083"
+

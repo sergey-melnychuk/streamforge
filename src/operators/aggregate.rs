@@ -260,6 +260,79 @@ impl AggregateFunction for Max {
     }
 }
 
+/// Median aggregation
+///
+/// Computes the median value by storing all values and sorting them.
+/// For streaming, this requires storing all values in the window.
+#[derive(Debug, Clone)]
+pub struct Median;
+
+#[derive(Debug, Clone)]
+pub struct MedianAccumulator {
+    values: Vec<f64>,
+}
+
+impl Median {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for Median {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AggregateFunction for Median {
+    type Accumulator = MedianAccumulator;
+
+    fn create_accumulator(&self) -> Self::Accumulator {
+        MedianAccumulator {
+            values: Vec::new(),
+        }
+    }
+
+    fn add(&self, acc: &mut Self::Accumulator, event: &Event) -> Result<()> {
+        let val = if let Some(v) = event.value.as_float() {
+            Some(v)
+        } else {
+            event.value.as_int().map(|v| v as f64)
+        };
+
+        if let Some(v) = val {
+            acc.values.push(v);
+        }
+        Ok(())
+    }
+
+    fn get_result(&self, acc: &Self::Accumulator) -> Result<EventValue> {
+        if acc.values.is_empty() {
+            return Ok(EventValue::Null);
+        }
+
+        let mut sorted = acc.values.clone();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        
+        let len = sorted.len();
+        let median = if len % 2 == 0 {
+            // Even number of elements: average of two middle values
+            (sorted[len / 2 - 1] + sorted[len / 2]) / 2.0
+        } else {
+            // Odd number of elements: middle value
+            sorted[len / 2]
+        };
+
+        Ok(EventValue::Float(median))
+    }
+
+    fn merge(&self, acc1: &Self::Accumulator, acc2: &Self::Accumulator) -> Self::Accumulator {
+        let mut merged = acc1.values.clone();
+        merged.extend_from_slice(&acc2.values);
+        MedianAccumulator { values: merged }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

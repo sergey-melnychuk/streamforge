@@ -1,140 +1,81 @@
-# StreamForge MVP Demo
+# StreamForge Demo
 
-This demo showcases all MVP features of StreamForge:
+**Standalone demo** that uses the StreamForge binary.
 
-1. **File Source & Sink** - Read from files, process, and write to files
-2. **Distributed Execution** - Execute operators across cluster nodes
-3. **Stateful Operators** - Operators that maintain state using state backends
-
-## Running the Demo
-
-### Run All Demos
+## Quick Start
 
 ```bash
+# 1. Build StreamForge binary (from project root)
+cd /path/to/streamforge
+cargo build --release --bin streamforge
+
+# 2. Run demo
 cd demo
-cargo run
+./run.sh
 ```
 
-### Run Individual Demos
+Press `Ctrl+C` to stop all services.
+
+## Structure
+
+```
+demo/
+├── load/                  # Load generator binaries
+│   ├── Cargo.toml
+│   └── src/
+│       ├── ad_event_server.rs
+│       └── price_event_server.rs
+├── jobs/                  # Job configuration files
+│   ├── ad_analytics.toml
+│   └── price_oracle.toml
+├── etc/                   # Configuration files (for Docker)
+│   ├── node1.toml         # Cluster node 1 config
+│   ├── node2.toml         # Cluster node 2 config
+│   ├── node3.toml         # Cluster node 3 config
+│   ├── prometheus/        # Prometheus configs
+│   └── grafana/           # Grafana configs
+├── docker-compose.yml     # Monitoring stack
+├── run.sh                 # Single orchestration script
+└── README.md
+```
+
+## What `run.sh` Does
+
+1. **Builds binaries**: StreamForge and load generators
+2. **Starts load generators**: Ad and price event servers
+3. **Starts cluster nodes**: 3-node cluster (ports 9001-9003)
+4. **Submits jobs**: Ad analytics and price oracle jobs
+5. **Waits for Ctrl+C**: Keeps everything running
+6. **Cleans up**: Stops all services on exit
+
+## Event Servers
+
+- **Ad Event Server**: `http://127.0.0.1:8091/event`
+- **Price Event Server**: `http://127.0.0.1:8092/event`
+
+## Job Configurations
+
+### Ad Analytics
+
+- **Source**: HTTP polling from `http://127.0.0.1:8091/event`
+- **SQL**: Groups by campaign_id, calculates COUNT, SUM, AVG
+- **Sink**: Prometheus metrics at `http://127.0.0.1:9090/metrics`
+
+### Price Oracle
+
+- **Source**: HTTP polling from `http://127.0.0.1:8092/event`
+- **SQL**: Groups by symbol, calculates MEDIAN, AVG, MIN, MAX
+- **Sink**: Prometheus metrics at `http://127.0.0.1:9091/metrics`
+
+## Metrics Endpoints
+
+- **Ad Analytics**: `http://127.0.0.1:9090/metrics`
+- **Price Oracle**: `http://127.0.0.1:9091/metrics`
+
+## Monitoring
 
 ```bash
-# File processing demo
-cargo run -- file
-
-# Distributed execution demo
-cargo run -- distributed
-
-# Stateful operators demo
-cargo run -- stateful
-
-# Production workload demo (NEW!)
-cargo run -- production
+docker-compose up -d
 ```
 
-## Demo Features
-
-### 1. File Source & Sink Demo
-
-Demonstrates:
-- Reading JSON events from a file
-- Filtering events (amount > 100)
-- Transforming events (doubling amounts)
-- Writing processed events to a file
-
-**What it shows:**
-- File source creation and usage
-- Stream processing with filter and map operators
-- File sink for output
-
-### 2. Distributed Execution Demo
-
-Demonstrates:
-- Setting up a 3-node cluster
-- Partition assignment across nodes
-- Distributed operator execution
-- Event routing based on keys
-
-**What it shows:**
-- Cluster membership management
-- Partition assignment using consistent hashing
-- Distributed context and executor
-- Local partition processing
-
-### 3. Stateful Operators Demo
-
-Demonstrates:
-- Creating state backends (in-memory)
-- Using operator state with namespaces
-- Stateful operator implementation
-- State storage and retrieval
-
-**What it shows:**
-- State backend abstraction
-- OperatorState helper for namespaced state
-- StatefulOperator trait usage
-- CountOperator example
-
-### 4. Production Workload Demo (Single Node)
-
-Demonstrates:
-- Real-time e-commerce order processing
-- Windowed aggregations (revenue per minute, orders per category)
-- Stateful analytics (customer lifetime value, top products)
-- Watermark-based event-time processing
-- Backpressure detection and flow control
-- Metrics collection and monitoring
-- High-throughput processing (900+ orders in 2 minutes)
-
-**What it shows:**
-- Production-like workload simulation
-- Multiple features working together
-- Real-time analytics dashboard
-- Performance metrics and monitoring
-
-### 5. Distributed Production Workload Demo (Multi-Node) ⭐ NEW!
-
-Demonstrates:
-- **Multi-node cluster setup** (3 nodes)
-- **Partition-based event routing** (events distributed across nodes)
-- **Distributed execution context** (coordinator node managing cluster)
-- **Local vs remote processing** (shows which events stay local vs routed)
-- **Cluster membership and coordination**
-- **Distributed analytics aggregation**
-- **High-throughput distributed processing** (450+ orders across cluster)
-
-**What it shows:**
-- **True distributed execution**: Events are partitioned and routed to different nodes
-- **Partition assignment**: Shows how partitions are assigned to nodes (e.g., Node 1: [2, 5, 7, 8])
-- **Event distribution**: Tracks local vs remote event routing
-- **Cluster coordination**: Multi-node cluster membership and coordination
-- **Production-ready distribution**: Same logic used in production deployments
-
-**Key Differences from Single-Node Demo:**
-- Events are partitioned by key (customer_id) and routed to appropriate nodes
-- Only events for local partitions are processed locally
-- Other events are routed to remote nodes (would use RPC in full production)
-- Shows realistic distribution: ~30% local, ~70% remote (typical for 3-node cluster)
-
-## MVP Capabilities Showcased
-
-✅ **End-to-End Processing**: Read → Process → Write
-✅ **Stream Operators**: Filter, map, and other transformations
-✅ **Distributed Processing**: Multi-node cluster execution
-✅ **State Management**: Persistent state for operators
-✅ **Partition Assignment**: Automatic data distribution
-✅ **Event-Time Processing**: Watermark-based windowing
-✅ **Backpressure Control**: Flow control and throttling
-✅ **Metrics & Monitoring**: Real-time performance tracking
-✅ **Production Workloads**: Real-world use case simulation
-✅ **Distributed Execution**: Multi-node cluster processing
-✅ **Partition-Based Routing**: Events distributed across cluster nodes
-✅ **Cluster Coordination**: Multi-node membership and coordination
-
-## Next Steps
-
-After running the demo, you can:
-1. Explore the code to understand how features work
-2. Modify the demos to test different scenarios
-3. Integrate StreamForge into your own projects
-4. Contribute improvements and new features
-
+Starts Prometheus and Grafana with pre-configured dashboards.

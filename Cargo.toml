@@ -54,6 +54,7 @@ async-trait = "0.1"
 
 # Metrics
 metrics = "0.21"
+prometheus = "0.13"
 
 # Time utilities
 chrono = "0.4"
@@ -75,6 +76,11 @@ rocksdb = "0.21"
 
 # HTTP client for sources
 reqwest = { version = "0.11", features = ["json"] }
+
+# HTTP server (axum)
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["trace"] }
 
 # TLS/SSL support
 rustls = "0.21"

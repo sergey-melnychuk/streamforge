@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use serde_json::Value as JsonValue;
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{error, warn};
+use tracing::{debug, error, info, warn};
 
 /// HTTP source configuration
 #[derive(Debug, Clone)]
@@ -128,6 +128,7 @@ impl HttpSource {
         &self,
         url: &str,
     ) -> Result<Option<Event>, Box<dyn std::error::Error + Send + Sync>> {
+        debug!("Polling URL: {}", url);
         let mut request = self.client.get(url);
 
         // Add headers
@@ -138,10 +139,12 @@ impl HttpSource {
         let response = request.send().await?;
 
         if !response.status().is_success() {
+            warn!("HTTP error from {}: {}", url, response.status());
             return Err(format!("HTTP error: {}", response.status()).into());
         }
 
         let json: JsonValue = response.json().await?;
+        debug!("Received JSON from {}: {} bytes", url, serde_json::to_string(&json).unwrap_or_default().len());
 
         // Extract value using JSON path
         let value = if let Some(path) = &self.config.value_path {
@@ -163,7 +166,8 @@ impl HttpSource {
             EventKey::default()
         };
 
-        let event = Event::new(key, value, chrono::Utc::now().timestamp_millis());
+        let event = Event::new(key.clone(), value, chrono::Utc::now().timestamp_millis());
+        info!("Successfully fetched event from {}: key={:?}", url, key);
 
         Ok(Some(event))
     }

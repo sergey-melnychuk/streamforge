@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 /// Metrics server for exposing metrics via HTTP
 pub struct MetricsServer {
@@ -29,18 +29,18 @@ impl MetricsServer {
     }
 
     /// Start the metrics server
-    pub async fn start(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn start(&self) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error + Send + Sync>> {
         let collectors = Arc::clone(&self.collectors);
         let addr = self.bind_address;
 
-        let _server = tokio::spawn(async move {
+        let server_handle = tokio::spawn(async move {
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
             use tokio::net::TcpListener;
 
             let listener = match TcpListener::bind(addr).await {
                 Ok(l) => l,
                 Err(e) => {
-                    warn!("Failed to bind metrics server: {}", e);
+                    error!("Failed to bind metrics server on {}: {}", addr, e);
                     return;
                 }
             };
@@ -77,8 +77,8 @@ impl MetricsServer {
             }
         });
 
-        // Don't await - let it run in background
-        Ok(())
+        // Return the handle so caller can keep it alive
+        Ok(server_handle)
     }
 
     async fn handle_metrics(
@@ -91,6 +91,13 @@ impl MetricsServer {
             let snapshot = collector.snapshot();
             metrics.push_str(&snapshot.to_prometheus());
             metrics.push('\n');
+        }
+
+        // If no collectors, return at least a basic metric to indicate the server is alive
+        if metrics.is_empty() {
+            metrics = "# HELP streamforge_node_up Node is up\n\
+                      # TYPE streamforge_node_up gauge\n\
+                      streamforge_node_up 1\n".to_string();
         }
 
         format!(

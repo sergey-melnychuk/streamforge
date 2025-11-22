@@ -129,13 +129,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let local_node_meta = NodeMetadata::new(local_id, local_addr);
 
     // Create transport and bind to address
-    let transport = Transport::bind(local_addr).await?;
+    let transport = Arc::new(Transport::bind(local_addr).await?);
     let actual_addr = transport.local_addr();
     println!("   Transport bound to: {}", actual_addr);
 
     // Create RPC server with membership
     let membership_for_rpc = Arc::new(ClusterMembership::new(local_id, 30));
-    let rpc_server = RpcServer::new(transport.clone()).with_membership(membership_for_rpc.clone());
+    let rpc_server = RpcServer::new(Arc::clone(&transport)).with_membership(membership_for_rpc.clone());
 
     // Start RPC server in background
     let server_handle = {
@@ -162,7 +162,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let mut discovery = GossipDiscovery::new(local_node_meta.clone(), config.clone())
-        .with_transport(Arc::new(transport.clone()));
+        .with_transport(transport);
 
     println!("   Local node: {} @ {}", local_node_meta.id, actual_addr);
     println!("   Gossip interval: {:?}", config.gossip_interval);

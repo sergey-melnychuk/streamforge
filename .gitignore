@@ -1,5 +1,5 @@
 # Rust
-/target/
+target/
 **/*.rs.bk
 *.pdb
 
@@ -20,6 +20,3 @@ Thumbs.db
 
 # Benchmarks
 criterion/
-
-# Documentation
-/target/doc/

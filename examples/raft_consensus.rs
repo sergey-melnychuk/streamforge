@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ========================================================================
     println!("🎯 Step 2: Setting up Node 1 with Raft consensus\n");
 
-    let transport1 = Transport::bind(node1_addr).await?;
+    let transport1 = Arc::new(Transport::bind(node1_addr).await?);
     let membership1 = Arc::new(ClusterMembership::new(node1_id, 30));
 
     let raft_config = RaftConfig {
@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let raft1 = Arc::new(Raft::new(
         node1_id,
-        Arc::new(transport1.clone()),
+        Arc::clone(&transport1),
         raft_config.clone(),
     ));
 
@@ -67,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     raft1.add_node(node3_id, node3_addr).await;
 
     // Set up RPC server with Raft
-    let rpc_server1 = RpcServer::new(transport1.clone())
+    let rpc_server1 = RpcServer::new(Arc::clone(&transport1))
         .with_membership(membership1.clone())
         .with_raft(raft1.clone());
 
