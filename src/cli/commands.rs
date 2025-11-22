@@ -277,15 +277,12 @@ pub async fn list_jobs(
 }
 
 /// Show node status (queries cluster membership to find node, then queries node via RPC)
-pub async fn show_node_status(
-    node_id: u64,
+pub async fn show_job_status(
+    job_id: String,
     nodes: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::net::SocketAddr;
-    use streamforge::distributed::NodeId;
     use streamforge::network::{RpcClient, Transport};
-    
-    let target_node_id = NodeId::new(node_id);
     
     // Parse node addresses from --nodes argument or use defaults
     let node_addresses: Vec<SocketAddr> = if let Some(nodes_str) = nodes {
@@ -303,87 +300,87 @@ pub async fn show_node_status(
         vec!["127.0.0.1:9001".parse().unwrap()]
     };
     
-    info!("Querying status of node {} from cluster nodes: {:?}", node_id, node_addresses);
+    info!("Querying status of job {} from cluster nodes: {:?}", job_id, node_addresses);
     
     // Create RPC client
     let transport = Transport::bind("0.0.0.0:0".parse().unwrap()).await
         .map_err(|e| format!("Failed to create transport: {}", e))?;
     let rpc_client = RpcClient::new(transport);
     
-    // Query any node to get membership, then find target node address
-    let mut target_node_addr = None;
-    
+    // Try each node until we find the job
+    let mut found = false;
     for node_addr in &node_addresses {
-        match rpc_client.get_membership(*node_addr).await {
-            Ok(membership) => {
-                // Find target node in membership
-                for node_metadata in membership.nodes {
-                    if node_metadata.id == target_node_id {
-                        target_node_addr = Some(node_metadata.address);
-                        break;
-                    }
+        #[derive(serde::Serialize)]
+        struct JobStatusRequest {
+            job_id: String,
+        }
+        
+        let payload = serde_json::to_vec(&JobStatusRequest { job_id: job_id.clone() })
+            .map_err(|e| format!("Failed to serialize job status request: {}", e))?;
+        
+        match rpc_client.call(*node_addr, "job_status", payload).await {
+            Ok(response_payload) => {
+                #[derive(serde::Deserialize)]
+                struct JobStatusResponse {
+                    success: bool,
+                    job: Option<crate::cli::job::Job>,
+                    error: Option<String>,
                 }
-                if target_node_addr.is_some() {
-                    break;
+                
+                match serde_json::from_slice::<JobStatusResponse>(&response_payload) {
+                    Ok(response) => {
+                        if response.success {
+                            if let Some(job) = response.job {
+                                println!("Job Status:");
+                                println!("  ID: {}", job.id);
+                                println!("  Name: {}", job.name);
+                                println!("  Status: {}", job.status);
+                                if let Some(started) = job.started_at {
+                                    println!("  Started: {}", format_time(started));
+                                }
+                                if let Some(stopped) = job.stopped_at {
+                                    println!("  Stopped: {}", format_time(stopped));
+                                }
+                                if let Some(error) = job.error {
+                                    println!("  Error: {}", error);
+                                }
+                                found = true;
+                                break;
+                            }
+                        } else {
+                            let error = response.error.unwrap_or_else(|| "Unknown error".to_string());
+                            warn!("Failed to get job status from node {}: {}", node_addr, error);
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to deserialize job status from node {}: {}", node_addr, e);
+                    }
                 }
             }
             Err(e) => {
-                warn!("Failed to get membership from node {}: {}", node_addr, e);
+                warn!("Failed to query job status from node {}: {}", node_addr, e);
             }
         }
     }
     
-    let target_addr = target_node_addr.ok_or_else(|| {
-        format!("Node {} not found in cluster membership", node_id)
-    })?;
-    
-    // Query target node for status
-    match rpc_client.call(target_addr, "node_status", vec![]).await {
-        Ok(response_payload) => {
-            #[derive(serde::Deserialize)]
-            struct NodeStatusResponse {
-                node_id: u64,
-                address: String,
-                status: String,
-                running_jobs: usize,
-                total_jobs: usize,
-            }
-            
-            match serde_json::from_slice::<NodeStatusResponse>(&response_payload) {
-                Ok(status) => {
-                    println!("Node Status:");
-                    println!("  ID: {}", status.node_id);
-                    println!("  Address: {}", status.address);
-                    println!("  Status: {}", status.status);
-                    println!("  Running Jobs: {}", status.running_jobs);
-                    println!("  Total Jobs: {}", status.total_jobs);
-                }
-                Err(e) => {
-                    return Err(format!("Failed to deserialize node status: {}", e).into());
-                }
-            }
-        }
-        Err(e) => {
-            return Err(format!("Failed to query node status from {}: {}", target_addr, e).into());
-        }
+    if !found {
+        return Err(format!("Job {} not found on any queried node", job_id).into());
     }
     
     Ok(())
 }
 
-/// Stop a node (queries cluster membership to find node, then sends stop signal via RPC)
-pub async fn stop_node(
-    node_id: u64,
+
+/// Stop a job (queries cluster nodes to find job, then sends stop signal via RPC)
+pub async fn stop_job(
+    job_id: String,
     force: bool,
     nodes: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::net::SocketAddr;
-    use streamforge::distributed::NodeId;
     use streamforge::network::{RpcClient, Transport};
     
-    let target_node_id = NodeId::new(node_id);
-    
-    info!("Stopping node: {} (force: {})", node_id, force);
+    info!("Stopping job: {} (force: {})", job_id, force);
     
     // Parse node addresses from --nodes argument or use defaults
     let node_addresses: Vec<SocketAddr> = if let Some(nodes_str) = nodes {
@@ -406,67 +403,54 @@ pub async fn stop_node(
         .map_err(|e| format!("Failed to create transport: {}", e))?;
     let rpc_client = RpcClient::new(transport);
     
-    // Query any node to get membership, then find target node address
-    let mut target_node_addr = None;
-    
+    // Try each node until we find and stop the job
+    let mut found = false;
     for node_addr in &node_addresses {
-        match rpc_client.get_membership(*node_addr).await {
-            Ok(membership) => {
-                // Find target node in membership
-                for node_metadata in membership.nodes {
-                    if node_metadata.id == target_node_id {
-                        target_node_addr = Some(node_metadata.address);
-                        break;
-                    }
+        #[derive(serde::Serialize)]
+        struct StopJobRequest {
+            job_id: String,
+            force: bool,
+        }
+        
+        let payload = serde_json::to_vec(&StopJobRequest { job_id: job_id.clone(), force })
+            .map_err(|e| format!("Failed to serialize stop request: {}", e))?;
+        
+        match rpc_client.call(*node_addr, "stop_job", payload).await {
+            Ok(response_payload) => {
+                #[derive(serde::Deserialize)]
+                struct StopJobResponse {
+                    success: bool,
+                    error: Option<String>,
                 }
-                if target_node_addr.is_some() {
-                    break;
+                
+                match serde_json::from_slice::<StopJobResponse>(&response_payload) {
+                    Ok(response) => {
+                        if response.success {
+                            println!("✅ Stop signal sent for job {} on node {}", job_id, node_addr);
+                            found = true;
+                            break;
+                        } else {
+                            let error = response.error.unwrap_or_else(|| "Unknown error".to_string());
+                            // If job not found, try next node
+                            if error.contains("not found") {
+                                continue;
+                            }
+                            warn!("Failed to stop job on node {}: {}", node_addr, error);
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to deserialize stop response from node {}: {}", node_addr, e);
+                    }
                 }
             }
             Err(e) => {
-                warn!("Failed to get membership from node {}: {}", node_addr, e);
+                warn!("Failed to send stop request to node {}: {}", node_addr, e);
             }
         }
     }
     
-    let target_addr = target_node_addr.ok_or_else(|| {
-        format!("Node {} not found in cluster membership", node_id)
-    })?;
-    
-    // Send stop request to target node
-    #[derive(serde::Serialize)]
-    struct StopNodeRequest {
-        force: bool,
-    }
-    
-    let payload = serde_json::to_vec(&StopNodeRequest { force })
-        .map_err(|e| format!("Failed to serialize stop request: {}", e))?;
-    
-    match rpc_client.call(target_addr, "stop_node", payload).await {
-        Ok(response_payload) => {
-            #[derive(serde::Deserialize)]
-            struct StopNodeResponse {
-                success: bool,
-                error: Option<String>,
-            }
-            
-            match serde_json::from_slice::<StopNodeResponse>(&response_payload) {
-                Ok(response) => {
-                    if response.success {
-                        println!("✅ Stop signal sent to node {} ({})", node_id, target_addr);
-                    } else {
-                        let error = response.error.unwrap_or_else(|| "Unknown error".to_string());
-                        return Err(format!("Failed to stop node: {}", error).into());
-                    }
-                }
-                Err(e) => {
-                    return Err(format!("Failed to deserialize stop response: {}", e).into());
-                }
-            }
-        }
-        Err(e) => {
-            return Err(format!("Failed to send stop request to node {} ({}): {}", node_id, target_addr, e).into());
-        }
+    if !found {
+        return Err(format!("Job {} not found on any queried node", job_id).into());
     }
     
     Ok(())
@@ -513,6 +497,7 @@ pub async fn cluster_nodes() -> Result<(), Box<dyn std::error::Error + Send + Sy
 /// Start a cluster node
 pub async fn start_node(
     config_path: PathBuf,
+    daemon: bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::net::SocketAddr;
     use std::sync::Arc;
@@ -592,11 +577,15 @@ pub async fn start_node(
 
     // Create job manager and executor for this node
     let job_manager = Arc::new(JobManager::new().await?);
-    let job_executor = Arc::new(JobExecutor::new_daemon(
-        Arc::clone(&job_manager),
-        3, // max restarts
-        Duration::from_secs(5), // restart delay
-    ));
+    let job_executor = if daemon {
+        Arc::new(JobExecutor::new_daemon(
+            Arc::clone(&job_manager),
+            3, // max restarts
+            Duration::from_secs(5), // restart delay
+        ))
+    } else {
+        Arc::new(JobExecutor::new(Arc::clone(&job_manager)))
+    };
 
     // Get metrics collector to track cluster activity
     let node_collector_opt = if config.metrics.enabled {
@@ -725,6 +714,132 @@ pub async fn start_node(
         })
     });
     rpc_server.register_handler("list_jobs", list_handler).await;
+    
+    // Register handler for job_status
+    let manager_for_job_status = job_manager.clone();
+    let job_status_handler: streamforge::network::rpc::RpcHandler = Arc::new(move |_method: String, payload: Vec<u8>| {
+        let manager = manager_for_job_status.clone();
+        Box::pin(async move {
+            #[derive(serde::Deserialize)]
+            struct JobStatusRequest {
+                job_id: String,
+            }
+            
+            let request: JobStatusRequest = match serde_json::from_slice(&payload) {
+                Ok(r) => r,
+                Err(e) => {
+                    #[derive(serde::Serialize)]
+                    struct JobStatusResponse {
+                        success: bool,
+                        job: Option<crate::cli::job::Job>,
+                        error: Option<String>,
+                    }
+                    return Ok(serde_json::to_vec(&JobStatusResponse {
+                        success: false,
+                        job: None,
+                        error: Some(format!("Failed to deserialize request: {}", e)),
+                    }).map_err(|e| streamforge::network::rpc::RpcError::Serialization(e.to_string()))?);
+                }
+            };
+            
+            let job = match manager.get_job(&request.job_id).await {
+                Ok(Some(j)) => Some(j),
+                Ok(None) => None,
+                Err(e) => {
+                    #[derive(serde::Serialize)]
+                    struct JobStatusResponse {
+                        success: bool,
+                        job: Option<crate::cli::job::Job>,
+                        error: Option<String>,
+                    }
+                    return Ok(serde_json::to_vec(&JobStatusResponse {
+                        success: false,
+                        job: None,
+                        error: Some(e.to_string()),
+                    }).map_err(|e| streamforge::network::rpc::RpcError::Serialization(e.to_string()))?);
+                }
+            };
+            
+            #[derive(serde::Serialize)]
+            struct JobStatusResponse {
+                success: bool,
+                job: Option<crate::cli::job::Job>,
+                error: Option<String>,
+            }
+            
+            if let Some(job) = job {
+                serde_json::to_vec(&JobStatusResponse {
+                    success: true,
+                    job: Some(job),
+                    error: None,
+                }).map_err(|e| streamforge::network::rpc::RpcError::Serialization(e.to_string()))
+            } else {
+                serde_json::to_vec(&JobStatusResponse {
+                    success: false,
+                    job: None,
+                    error: Some(format!("Job {} not found", request.job_id)),
+                }).map_err(|e| streamforge::network::rpc::RpcError::Serialization(e.to_string()))
+            }
+        })
+    });
+    rpc_server.register_handler("job_status", job_status_handler).await;
+    
+    // Register handler for stop_job
+    let executor_for_stop_job = job_executor.clone();
+    let manager_for_stop_job = job_manager.clone();
+    let stop_job_handler: streamforge::network::rpc::RpcHandler = Arc::new(move |_method: String, payload: Vec<u8>| {
+        let executor = executor_for_stop_job.clone();
+        let manager = manager_for_stop_job.clone();
+        Box::pin(async move {
+            #[derive(serde::Deserialize)]
+            struct StopJobRequest {
+                job_id: String,
+                force: bool,
+            }
+            
+            let request: StopJobRequest = match serde_json::from_slice(&payload) {
+                Ok(r) => r,
+                Err(e) => {
+                    #[derive(serde::Serialize)]
+                    struct StopJobResponse {
+                        success: bool,
+                        error: Option<String>,
+                    }
+                    return Ok(serde_json::to_vec(&StopJobResponse {
+                        success: false,
+                        error: Some(format!("Failed to deserialize request: {}", e)),
+                    }).map_err(|e| streamforge::network::rpc::RpcError::Serialization(e.to_string()))?);
+                }
+            };
+            
+            // Stop the job
+            match executor.stop_job(&request.job_id, request.force).await {
+                Ok(_) => {
+                    #[derive(serde::Serialize)]
+                    struct StopJobResponse {
+                        success: bool,
+                        error: Option<String>,
+                    }
+                    serde_json::to_vec(&StopJobResponse {
+                        success: true,
+                        error: None,
+                    }).map_err(|e| streamforge::network::rpc::RpcError::Serialization(e.to_string()))
+                }
+                Err(e) => {
+                    #[derive(serde::Serialize)]
+                    struct StopJobResponse {
+                        success: bool,
+                        error: Option<String>,
+                    }
+                    serde_json::to_vec(&StopJobResponse {
+                        success: false,
+                        error: Some(e.to_string()),
+                    }).map_err(|e| streamforge::network::rpc::RpcError::Serialization(e.to_string()))
+                }
+            }
+        })
+    });
+    rpc_server.register_handler("stop_job", stop_job_handler).await;
     
     // Register handler for node_status
     let manager_for_status = job_manager.clone();

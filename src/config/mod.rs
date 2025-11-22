@@ -122,6 +122,9 @@ pub enum SourceConfig {
         /// JSON path to extract key (e.g., "$.symbol")
         #[serde(default)]
         key_path: Option<String>,
+        /// Optional path to log raw source events to a .jsonl file
+        #[serde(default)]
+        source_log_path: Option<String>,
     },
 }
 

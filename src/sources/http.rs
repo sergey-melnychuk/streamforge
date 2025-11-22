@@ -29,6 +29,8 @@ pub struct HttpSourceConfig {
     pub key_path: Option<String>,
     /// Headers to include in requests
     pub headers: Vec<(String, String)>,
+    /// Optional path to log raw source events to a .jsonl file
+    pub source_log_path: Option<String>,
 }
 
 impl Default for HttpSourceConfig {
@@ -42,6 +44,7 @@ impl Default for HttpSourceConfig {
             value_path: None,
             key_path: None,
             headers: Vec::new(),
+            source_log_path: None,
         }
     }
 }
@@ -166,8 +169,39 @@ impl HttpSource {
             EventKey::default()
         };
 
-        let event = Event::new(key.clone(), value, chrono::Utc::now().timestamp_millis());
+        let timestamp = chrono::Utc::now().timestamp_millis();
+        let event = Event::new(key.clone(), value.clone(), timestamp);
         info!("Successfully fetched event from {}: key={:?}", url, key);
+
+        // Log raw event to file if source_log_path is configured
+        // Use spawn_blocking for file I/O to avoid blocking the async runtime
+        if let Some(ref log_path) = self.config.source_log_path {
+            if let EventValue::Json(json) = &value {
+                let log_path = log_path.clone();
+                let json_clone = json.clone();
+                let timestamp_clone = timestamp;
+                
+                // Spawn blocking task for file I/O
+                tokio::task::spawn_blocking(move || {
+                    let log_entry = serde_json::json!({
+                        "value": json_clone.get("value").or_else(|| json_clone.get("price")),
+                        "timestamp": timestamp_clone,
+                        "raw": json_clone
+                    });
+                    if let Ok(log_line) = serde_json::to_string(&log_entry) {
+                        use std::fs::OpenOptions;
+                        use std::io::Write;
+                        if let Ok(mut file) = OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(&log_path)
+                        {
+                            let _ = writeln!(file, "{}", log_line);
+                        }
+                    }
+                });
+            }
+        }
 
         Ok(Some(event))
     }

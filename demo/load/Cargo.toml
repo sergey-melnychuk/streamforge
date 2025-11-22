@@ -20,3 +20,6 @@ path = "src/ad_event_server.rs"
 name = "price_event_server"
 path = "src/price_event_server.rs"
 
+[[bin]]
+name = "simple_counter_server"
+path = "src/simple_counter_server.rs"

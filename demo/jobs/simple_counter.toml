@@ -1,0 +1,23 @@
+# Simple Counter Job Configuration
+# HTTP source that polls a counter endpoint, aggregates min/max/count every 10 seconds, and writes to file
+
+[processing]
+parallelism = 1
+buffer_size = 1024
+backpressure_enabled = true
+batch_size = 100
+
+[job]
+source = { type = "http", urls = ["http://127.0.0.1:8093/counter"], poll_interval = 1, timeout = 5, source_log_path = "/tmp/streamforge_counter_source.jsonl" }
+
+sql = """
+SELECT 
+    COUNT(*) AS count,
+    MIN(value) AS min_value,
+    MAX(value) AS max_value
+FROM counter_events
+WINDOW TUMBLING 10 SECONDS
+"""
+
+sink = { type = "file", path = "/tmp/streamforge_counter_output.jsonl", format = "json", append = true }
+

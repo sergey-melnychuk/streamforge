@@ -32,7 +32,8 @@ cleanup() {
     # Kill by process name as fallback
     pkill -f "ad_event_server" || true
     pkill -f "price_event_server" || true
-    pkill -f "streamforge.*start" || true
+    pkill -f "simple_counter_server" || true
+    pkill -f "streamforge.*node" || true
     pkill -f "streamforge.*submit" || true
     
     # Stop monitoring
@@ -53,7 +54,8 @@ trap cleanup INT TERM
 echo -e "${YELLOW}Cleaning up any existing processes...${NC}"
 pkill -f "ad_event_server" 2>/dev/null || true
 pkill -f "price_event_server" 2>/dev/null || true
-pkill -f "streamforge.*start" 2>/dev/null || true
+pkill -f "simple_counter_server" 2>/dev/null || true
+pkill -f "streamforge.*node" 2>/dev/null || true
 pkill -f "streamforge.*submit" 2>/dev/null || true
 sleep 1
 
@@ -70,27 +72,44 @@ cargo build --release --bin streamforge || {
     exit 1
 }
 
-cd "$DEMO_DIR/load"
-cargo build --release || {
-    echo -e "${RED}Failed to build load generators${NC}"
+cd "$DEMO_DIR"
+cargo build --release --bin simple_counter_server || {
+    echo -e "${RED}Failed to build simple_counter_server${NC}"
     exit 1
 }
+cd "$PROJECT_ROOT"
+
+# Commented out: Other demo load generators
+# cd "$DEMO_DIR/load"
+# cargo build --release || {
+#     echo -e "${RED}Failed to build load generators${NC}"
+#     exit 1
+# }
 cd "$PROJECT_ROOT"
 
 echo ""
 
 # Step 2: Start load generators
 echo -e "${BLUE}Step 2: Starting load generators...${NC}"
-cd "$DEMO_DIR/load"
-./target/release/ad_event_server > /dev/null 2>&1 &
-AD_PID=$!
-PIDS+=($AD_PID)
-echo "  ✓ Ad Event Server (PID: $AD_PID)"
 
-./target/release/price_event_server > /dev/null 2>&1 &
-PRICE_PID=$!
-PIDS+=($PRICE_PID)
-echo "  ✓ Price Event Server (PID: $PRICE_PID)"
+# Commented out: Other demo jobs
+# cd "$DEMO_DIR/load"
+# ./target/release/ad_event_server > /dev/null 2>&1 &
+# AD_PID=$!
+# PIDS+=($AD_PID)
+# echo "  ✓ Ad Event Server (PID: $AD_PID)"
+# 
+# ./target/release/price_event_server > /dev/null 2>&1 &
+# PRICE_PID=$!
+# PIDS+=($PRICE_PID)
+# echo "  ✓ Price Event Server (PID: $PRICE_PID)"
+
+# Start simple counter server
+cd "$DEMO_DIR"
+"$DEMO_DIR/target/release/simple_counter_server" > /tmp/counter_server.log 2>&1 &
+COUNTER_PID=$!
+PIDS+=($COUNTER_PID)
+echo "  ✓ Counter Server (PID: $COUNTER_PID)"
 
 sleep 2
 cd "$PROJECT_ROOT"
@@ -101,7 +120,7 @@ echo -e "${BLUE}Step 3: Starting cluster nodes...${NC}"
 
 # Start nodes as background processes
 for i in 1 2 3; do
-    "$PROJECT_ROOT/target/release/streamforge" start --config "$DEMO_DIR/etc/node$i.toml" > /tmp/node$i.log 2>&1 &
+    "$PROJECT_ROOT/target/release/streamforge" node --config "$DEMO_DIR/etc/node$i.toml" --daemon > /tmp/node$i.log 2>&1 &
     NODE_PID=$!
     PIDS+=($NODE_PID)
     echo "  ✓ Node $i (PID: $NODE_PID)"
@@ -137,20 +156,24 @@ cd "$PROJECT_ROOT"
 echo ""
 echo -e "${BLUE}Step 5: Submitting jobs...${NC}"
 
-# Submit jobs with daemon mode to keep them running
-# Note: Jobs run in background tasks, submit command exits after starting them
-# Try nodes in order: node1, node2, node3
-"$PROJECT_ROOT/target/release/streamforge" submit --config "$DEMO_DIR/jobs/ad_analytics.toml" --daemon --nodes "127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003" 2>&1 | tee /tmp/ad_analytics_submit.log &
-JOB1_PID=$!
-PIDS+=($JOB1_PID)
-echo "  ✓ Ad Analytics job submitted (PID: $JOB1_PID)"
+# Commented out: Other demo jobs
+# "$PROJECT_ROOT/target/release/streamforge" submit --config "$DEMO_DIR/jobs/ad_analytics.toml" --daemon --nodes "127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003" 2>&1 | tee /tmp/ad_analytics_submit.log &
+# JOB1_PID=$!
+# PIDS+=($JOB1_PID)
+# echo "  ✓ Ad Analytics job submitted (PID: $JOB1_PID)"
+# 
+# sleep 2
+# 
+# "$PROJECT_ROOT/target/release/streamforge" submit --config "$DEMO_DIR/jobs/price_oracle.toml" --daemon --nodes "127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003" 2>&1 | tee /tmp/price_oracle_submit.log &
+# JOB2_PID=$!
+# PIDS+=($JOB2_PID)
+# echo "  ✓ Price Oracle job submitted (PID: $JOB2_PID)"
 
-sleep 2
-
-"$PROJECT_ROOT/target/release/streamforge" submit --config "$DEMO_DIR/jobs/price_oracle.toml" --daemon --nodes "127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003" 2>&1 | tee /tmp/price_oracle_submit.log &
-JOB2_PID=$!
-PIDS+=($JOB2_PID)
-echo "  ✓ Price Oracle job submitted (PID: $JOB2_PID)"
+# Submit simple counter job
+"$PROJECT_ROOT/target/release/streamforge" submit --config "$DEMO_DIR/jobs/simple_counter.toml" --daemon --nodes "127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003" 2>&1 | tee /tmp/simple_counter_submit.log &
+COUNTER_JOB_PID=$!
+PIDS+=($COUNTER_JOB_PID)
+echo "  ✓ Simple Counter job submitted (PID: $COUNTER_JOB_PID)"
 
 sleep 5
 echo -e "${YELLOW}Waiting for jobs to initialize and start processing...${NC}"
@@ -162,13 +185,19 @@ echo -e "${GREEN}All services running!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "Event Servers:"
-echo "  📡 Ad Events:    http://127.0.0.1:8091/event"
-echo "  📡 Price Events: http://127.0.0.1:8092/event"
+echo "  📡 Counter:      http://127.0.0.1:8093/counter"
+# Commented out: Other demo servers
+# echo "  📡 Ad Events:    http://127.0.0.1:8091/event"
+# echo "  📡 Price Events: http://127.0.0.1:8092/event"
 echo ""
-echo "Metrics:"
-echo "  📊 Ad Analytics: http://127.0.0.1:9100/metrics"
-echo "  📊 Price Oracle: http://127.0.0.1:9101/metrics"
+echo "Output File:"
+echo "  📄 Counter Output: /tmp/streamforge_counter_output.jsonl"
 echo ""
+# Commented out: Other demo metrics
+# echo "Metrics:"
+# echo "  📊 Ad Analytics: http://127.0.0.1:9100/metrics"
+# echo "  📊 Price Oracle: http://127.0.0.1:9101/metrics"
+# echo ""
 echo "Cluster Nodes:"
 echo "  🖥️  Node 1: 127.0.0.1:9001 (metrics: 127.0.0.1:9081)"
 echo "  🖥️  Node 2: 127.0.0.1:9002 (metrics: 127.0.0.1:9082)"
@@ -179,10 +208,10 @@ echo "  📈 Prometheus: http://localhost:9090"
 echo "  📈 Grafana:    http://localhost:3000 (admin/admin)"
 echo ""
 echo -e "${YELLOW}Troubleshooting:${NC}"
-echo "  - Check job status: streamforge list"
-echo "  - Check metrics: curl http://127.0.0.1:9090/metrics"
-echo "  - Check logs: /tmp/ad_analytics_submit.log, /tmp/price_oracle_submit.log"
-echo "  - Jobs use 60-second windows, metrics may take up to 60s to appear"
+echo "  - Check job status: streamforge list --nodes \"127.0.0.1:9001\""
+echo "  - Check output file: tail -f /tmp/streamforge_counter_output.jsonl"
+echo "  - Check logs: /tmp/simple_counter_submit.log, /tmp/node1.log"
+echo "  - Job uses 10-second windows, output should appear every 10 seconds"
 echo ""
 echo -e "${YELLOW}Press Ctrl+C to stop all services${NC}"
 echo ""

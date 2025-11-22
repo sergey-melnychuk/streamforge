@@ -48,22 +48,22 @@ enum Commands {
         #[arg(long)]
         nodes: Option<String>,
     },
-    /// Show node status
+    /// Show job status
     Status {
-        /// Node ID (u64)
-        node_id: u64,
-        /// Cluster nodes to query for membership (host:port pairs, e.g., "127.0.0.1:9001,127.0.0.1:9002")
+        /// Job ID
+        job_id: String,
+        /// Cluster nodes to query (host:port pairs, e.g., "127.0.0.1:9001,127.0.0.1:9002")
         #[arg(long)]
         nodes: Option<String>,
     },
-    /// Stop a running node
+    /// Stop a running job
     Stop {
-        /// Node ID (u64)
-        node_id: u64,
+        /// Job ID
+        job_id: String,
         /// Force stop (don't wait for graceful shutdown)
         #[arg(short, long)]
         force: bool,
-        /// Cluster nodes to query for membership (host:port pairs, e.g., "127.0.0.1:9001,127.0.0.1:9002")
+        /// Cluster nodes to query (host:port pairs, e.g., "127.0.0.1:9001,127.0.0.1:9002")
         #[arg(long)]
         nodes: Option<String>,
     },
@@ -78,10 +78,13 @@ enum Commands {
         command: Option<ClusterCommands>,
     },
     /// Start a cluster node
-    Start {
+    Node {
         /// Path to node configuration file
         #[arg(short, long)]
         config: PathBuf,
+        /// Run in daemon mode (restart on failure)
+        #[arg(long)]
+        daemon: bool,
     },
     /// Check if cluster nodes are ready
     Ready {
@@ -115,11 +118,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::List { verbose, nodes } => {
             list_jobs(verbose, nodes).await?;
         }
-        Commands::Status { node_id, nodes } => {
-            show_node_status(node_id, nodes).await?;
+        Commands::Status { job_id, nodes } => {
+            show_job_status(job_id, nodes).await?;
         }
-        Commands::Stop { node_id, force, nodes } => {
-            stop_node(node_id, force, nodes).await?;
+        Commands::Stop { job_id, force, nodes } => {
+            stop_job(job_id, force, nodes).await?;
         }
         Commands::Validate { config } => {
             validate_config(config).await?;
@@ -132,8 +135,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 cluster_nodes().await?;
             }
         },
-        Commands::Start { config } => {
-            start_node(config).await?;
+        Commands::Node { config, daemon } => {
+            start_node(config, daemon).await?;
         }
         Commands::Ready { nodes } => {
             check_nodes_ready(nodes).await?;

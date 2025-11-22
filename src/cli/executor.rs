@@ -432,6 +432,7 @@ impl JobExecutor {
                 timeout,
                 value_path,
                 key_path,
+                source_log_path,
             } => {
                 let config = streamforge::sources::http::HttpSourceConfig {
                     urls: urls.clone(),
@@ -442,6 +443,7 @@ impl JobExecutor {
                     value_path: value_path.clone(),
                     key_path: key_path.clone(),
                     headers: Vec::new(),
+                    source_log_path: source_log_path.clone(),
                 };
                 let source = HttpSource::new(config)?;
                 Ok(Stream::from_source(source))
