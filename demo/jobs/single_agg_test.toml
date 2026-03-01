@@ -1,0 +1,13 @@
+# Single-aggregation test — exercises execute_windowed_aggregation (separate code path from multi-agg)
+
+[job]
+source = { type = "http", urls = ["http://127.0.0.1:8093/counter"], poll_interval = 1, timeout = 5 }
+
+sql = """
+SELECT COUNT(*) AS count
+FROM counter_events
+--WHERE value > 5
+WINDOW TUMBLING 10 SECONDS
+"""
+
+sink = { type = "file", path = "/tmp/streamforge_single_agg_output.jsonl", format = "json", append = true }

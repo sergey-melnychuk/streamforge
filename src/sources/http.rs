@@ -147,7 +147,11 @@ impl HttpSource {
         }
 
         let json: JsonValue = response.json().await?;
-        debug!("Received JSON from {}: {} bytes", url, serde_json::to_string(&json).unwrap_or_default().len());
+        debug!(
+            "Received JSON from {}: {} bytes",
+            url,
+            serde_json::to_string(&json).unwrap_or_default().len()
+        );
 
         // Extract value using JSON path
         let value = if let Some(path) = &self.config.value_path {
@@ -180,7 +184,7 @@ impl HttpSource {
                 let log_path = log_path.clone();
                 let json_clone = json.clone();
                 let timestamp_clone = timestamp;
-                
+
                 // Spawn blocking task for file I/O
                 tokio::task::spawn_blocking(move || {
                     let log_entry = serde_json::json!({
@@ -191,10 +195,8 @@ impl HttpSource {
                     if let Ok(log_line) = serde_json::to_string(&log_entry) {
                         use std::fs::OpenOptions;
                         use std::io::Write;
-                        if let Ok(mut file) = OpenOptions::new()
-                            .create(true)
-                            .append(true)
-                            .open(&log_path)
+                        if let Ok(mut file) =
+                            OpenOptions::new().create(true).append(true).open(&log_path)
                         {
                             let _ = writeln!(file, "{}", log_line);
                         }

@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "127.0.0.1:9001".to_string(),
             "127.0.0.1:9002".to_string(),
         ])
-        .with_state_backend(streamforge::config::state::StateBackendType::RocksDB)
+        .with_state_backend(streamforge::config::state::StateBackendType::Memory)
         .with_state_dir(PathBuf::from("./data/state"))
         .with_metrics_enabled(true)
         .build();

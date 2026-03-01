@@ -5,9 +5,7 @@
 use crate::core::{Event, EventValue};
 use crate::sinks::Sink;
 use async_trait::async_trait;
-use prometheus::{
-    Encoder, GaugeVec, IntCounterVec, Opts, Registry, TextEncoder,
-};
+use prometheus::{Encoder, GaugeVec, IntCounterVec, Opts, Registry, TextEncoder};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -49,7 +47,9 @@ pub struct MetricsSink {
 
 impl MetricsSink {
     /// Create a new metrics sink
-    pub fn new(config: MetricsSinkConfig) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn new(
+        config: MetricsSinkConfig,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let registry = Registry::new();
 
         // Start HTTP server if configured
@@ -95,7 +95,7 @@ impl MetricsSink {
 
     /// Start HTTP server for metrics endpoint
     async fn start_http_server(addr: SocketAddr, registry: Registry) {
-        use axum::{routing::get, Router, response::Response, body::Body};
+        use axum::{body::Body, response::Response, routing::get, Router};
         use std::sync::Arc as StdArc;
         use tracing::{error, warn};
 
@@ -148,10 +148,18 @@ impl MetricsSink {
                 }
                 Err(e) => {
                     if attempt < 4 {
-                        warn!("Failed to bind metrics server on {} (attempt {}/5): {}, retrying...", addr, attempt + 1, e);
+                        warn!(
+                            "Failed to bind metrics server on {} (attempt {}/5): {}, retrying...",
+                            addr,
+                            attempt + 1,
+                            e
+                        );
                         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                     } else {
-                        error!("Failed to bind metrics server on {} after 5 attempts: {}", addr, e);
+                        error!(
+                            "Failed to bind metrics server on {} after 5 attempts: {}",
+                            addr, e
+                        );
                         return;
                     }
                 }
@@ -161,13 +169,16 @@ impl MetricsSink {
         let listener = match listener {
             Some(l) => l,
             None => {
-                error!("Failed to bind metrics server on {}: all attempts exhausted", addr);
+                error!(
+                    "Failed to bind metrics server on {}: all attempts exhausted",
+                    addr
+                );
                 return;
             }
         };
 
         info!("Prometheus metrics endpoint: http://{}/metrics", addr);
-        
+
         if let Err(e) = axum::serve(listener, app).await {
             error!("Metrics server failed on {}: {}", addr, e);
         }
@@ -185,7 +196,7 @@ impl MetricsSink {
             return Ok(gauge.clone());
         }
 
-        let opts = Opts::new(metric_name, "")
+        let opts = Opts::new(metric_name, metric_name)
             .namespace(&self.config.metric_prefix)
             .subsystem("");
         let gauge = GaugeVec::new(opts, label_names)?;
@@ -208,7 +219,7 @@ impl MetricsSink {
             return Ok(counter.clone());
         }
 
-        let opts = Opts::new(metric_name, "")
+        let opts = Opts::new(metric_name, metric_name)
             .namespace(&self.config.metric_prefix)
             .subsystem("");
         let counter = IntCounterVec::new(opts, label_names)?;
@@ -220,7 +231,10 @@ impl MetricsSink {
     }
 
     /// Convert event to Prometheus metrics
-    async fn event_to_metrics(&self, event: &Event) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn event_to_metrics(
+        &self,
+        event: &Event,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         use tracing::debug;
         if let EventValue::Json(json) = &event.value {
             if let Some(obj) = json.as_object() {
@@ -255,7 +269,10 @@ impl MetricsSink {
                 // Record metrics for each numeric value
                 for (field, value) in &values {
                     let metric_name = format!("{}_{}", self.config.metric_prefix, field);
-                    info!("Creating metric: {} = {} with labels: {:?}", metric_name, value, labels);
+                    info!(
+                        "Creating metric: {} = {} with labels: {:?}",
+                        metric_name, value, labels
+                    );
 
                     // Get or create gauge
                     let gauge = self.get_or_create_gauge(&metric_name, &label_keys).await?;
@@ -266,8 +283,12 @@ impl MetricsSink {
                 // Special handling for count fields
                 if let Some(count) = values.get("event_count") {
                     let metric_name = format!("{}_events_total", self.config.metric_prefix);
-                    let counter = self.get_or_create_counter(&metric_name, &label_keys).await?;
-                    counter.with_label_values(&label_values).inc_by(*count as u64);
+                    let counter = self
+                        .get_or_create_counter(&metric_name, &label_keys)
+                        .await?;
+                    counter
+                        .with_label_values(&label_values)
+                        .inc_by(*count as u64);
                 }
             }
         }
@@ -279,9 +300,9 @@ impl MetricsSink {
 #[async_trait]
 impl Sink for MetricsSink {
     async fn write(&mut self, event: Event) -> Result<(), crate::sinks::SinkError> {
-        self.event_to_metrics(&event)
-            .await
-            .map_err(|e| crate::sinks::SinkError::Other(format!("Failed to record metrics: {}", e)))?;
+        self.event_to_metrics(&event).await.map_err(|e| {
+            crate::sinks::SinkError::Other(format!("Failed to record metrics: {}", e))
+        })?;
         Ok(())
     }
 

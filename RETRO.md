@@ -264,3 +264,119 @@ tail -f /tmp/streamforge_job_simple_counter_*.log
 4. Only add complexity when simple version works
 5. Clean up unnecessary code after everything works
 
+---
+
+# Recovery: Sessions 6 & 7
+
+## Session 6 — Multi-Aggregation Windowed Queries Fixed (2025-11-22 → 2026-03-01)
+
+### What Was Broken
+The counter job (`COUNT(*) AS count, MIN(value) AS min_value, MAX(value) AS max_value`) produced no output in the file sink.
+
+### Root Causes and Fixes
+
+**1. `project_event` silently skipped `SelectField::Aggregation`**
+
+`apply_projection` matched `SelectField::Aggregation` but had no body — the arm fell through without inserting anything into the result. Fixed by reading the pre-computed alias field back from the event JSON:
+
+```rust
+SelectField::Aggregation(agg) => {
+    let field_name = agg.alias.as_ref()
+        .unwrap_or(&agg.function.to_lowercase())
+        .clone();
+    if let EventValue::Json(json) = &event.value {
+        if let Some(value) = json.get(&field_name).or_else(|| json.get("value")) {
+            result_json.insert(field_name, value.clone());
+        }
+    }
+}
+```
+
+**2. `window_start` / `window_end` not preserved through projection**
+
+Added explicit pass-through of windowing metadata fields in `project_event`.
+
+**3. Test infrastructure issues**
+- `demo/load/Cargo.toml` was missing `chrono` dependency
+- Test script used release builds (slow) and wrong binary paths
+- Old node process not being killed cleanly — fixed with `pkill -f "streamforge"` + `lsof -ti:9001 | xargs kill -9`
+
+**4. `STREAMFORGE_DATA_DIR` env var**
+Added to `src/cli/job.rs` and `src/cli/executor.rs` to isolate job state to `target/test-state/` during tests.
+
+**5. Dead dependencies removed**
+Removed `opentelemetry`, `opentelemetry_sdk`, `opentelemetry-otlp`, `opentelemetry-jaeger`, `tracing-opentelemetry`, `metrics = "0.21"`. Made `rocksdb` optional behind a feature flag.
+
+### What Was Verified Working
+After session 6 fixes:
+- `simple_counter.toml`: `COUNT(*) AS count, MIN(value) AS min_value, MAX(value) AS max_value` — tumbling window, all aggregations present in output.
+
+---
+
+## Session 7 — Full SQL Coverage, GROUP BY, HAVING, Window Types, Unit Tests (2026-03-01)
+
+### What Was Tested and Fixed
+
+**1. GROUP BY key not embedded in result**
+
+`apply_windowed_aggregations` iterated groups with `_key` (discarded), produced result events without the group key field. Fixed by embedding GROUP BY field value into the result JSON map, and using `EventKey::None` on the result event to avoid a redundant `"key"` field in file sink output.
+
+**2. Single-aggregation "value" key fallback**
+
+`StreamingWindowedAggregator` (used for single-aggregation queries) stores the scalar result under `"value"`, not the alias. `project_event` only looked for the alias and found nothing. Fixed with:
+
+```rust
+json.get(&field_name).or_else(|| json.get("value"))
+```
+
+Output uses the alias name regardless of which key was found.
+
+**3. HAVING not applied in windowed batch path**
+
+`apply_windowed_aggregations` computed results but never evaluated `self.query.having`. Fixed by adding `results.retain(...)` before returning:
+
+```rust
+if let Some(ref having) = self.query.having {
+    results.retain(|e| match having.condition.evaluate(e) {
+        Value::Boolean(b) => b,
+        _ => false,
+    });
+}
+```
+
+**4. HAVING parser ordering**
+
+The SQL parser expects `... GROUP BY field HAVING condition WINDOW ...`. Placing HAVING after WINDOW causes it to be silently ignored. All job configs fixed to use the correct order.
+
+**5. `test-simple-counter.sh` path resolution bug**
+
+Script `cd`s to `$SCRIPT_DIR` after building, so a relative path argument like `demo/jobs/single_agg_test.toml` resolved to `demo/demo/jobs/...`. Fixed by resolving the argument to an absolute path at script start.
+
+### What Was Verified Working
+
+| Job | Window Type | Features |
+|-----|-------------|---------|
+| `simple_counter.toml` | Tumbling | COUNT, MIN, MAX |
+| `single_agg_test.toml` | Tumbling | COUNT (single-agg path) |
+| `ad_analytics.toml` | Session | COUNT, SUM, AVG + GROUP BY |
+| `price_oracle.toml` | Sliding | MEDIAN, AVG, MIN, MAX, SUM, COUNT + GROUP BY |
+
+WHERE clause: `WHERE value > 5` correctly reduced event count.
+HAVING clause: `HAVING event_count > 1` correctly filtered single-event sessions.
+Sliding windows: overlapping windows confirmed (each event in multiple windows).
+Session windows: per-event session boundaries confirmed.
+
+### Unit Tests Added (`src/query/executor.rs`, `mod tests`)
+
+1. `test_project_event_aggregation_alias_preserved` — regression for session-6 `SelectField::Aggregation` skip bug
+2. `test_project_event_aggregation_single_agg_value_fallback` — "value" → alias fallback for single-agg path
+3. `test_project_event_field_and_all` — `SelectField::Field` extraction and exclusion of unreferenced fields
+4. `test_apply_windowed_aggregations_group_by_key_embedded` — GROUP BY field present in result event
+5. `test_apply_windowed_aggregations_having_filters` — HAVING correctly retains/excludes groups
+
+### Lessons Reinforced
+
+- **Static vs instance method**: `project_event` is a static associated function (`fn project_event(event, fields)`), not `&self`. Test calls must use `QueryExecutor::project_event(&event, &executor.query.select.fields)`.
+- **Two separate code paths for single vs multi-agg**: changes to one path don't affect the other — test both explicitly.
+- **SQL clause ordering is load-bearing**: the parser enforces `WHERE → GROUP BY → HAVING → WINDOW`; out-of-order clauses are silently ignored, not errors.
+

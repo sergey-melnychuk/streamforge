@@ -1,9 +1,34 @@
 # Production-Ready Features Implementation Plan
 
-**Last Updated**: 2025-11-21
+**Last Updated**: 2026-03-01
 
 ## Overview
 Transform StreamForge into a production-ready system with SQL queries, autonomous operation, metrics, alerting, and offset tracking.
+
+## 🟢 Current State (2026-03-01)
+
+### Query Engine — Fully Verified End-to-End
+
+Sessions 6–7 fixed all known windowed aggregation bugs and verified the full SQL feature set works in production conditions (real HTTP sources, file sinks, daemon mode):
+
+- **Tumbling / Sliding / Session windows** — all three tested and passing
+- **Single-agg and multi-agg paths** — both tested (separate code paths in executor)
+- **GROUP BY** — key correctly embedded in result events
+- **WHERE / HAVING** — both verified (HAVING requires multi-agg code path)
+- **All aggregation functions** — COUNT, SUM, AVG, MIN, MAX, MEDIAN
+
+SQL clause ordering enforced by parser: `WHERE → GROUP BY → HAVING → WINDOW`. Out-of-order clauses are silently ignored.
+
+**5 new unit tests** added to `src/query/executor.rs` covering all regression cases.
+
+### Next Priorities
+
+1. **External connectors** — Kafka source/sink is the highest-value addition
+2. **Metrics sink** — emit aggregation results to Prometheus
+3. **Query optimizer** — filter pushdown, predicate evaluation order
+4. **Integration tests** — automated end-to-end test suite (currently manual scripts)
+
+---
 
 ## ✅ Completed Features
 

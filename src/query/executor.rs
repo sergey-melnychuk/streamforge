@@ -6,7 +6,10 @@ use crate::core::{Event, EventKey, EventValue};
 use crate::distributed::node::NodeId;
 use crate::execution::{DistributedContext, ShuffleManager, Stream};
 use crate::network::RpcClient;
-use crate::operators::{SessionWindow, SlidingWindow, TumblingWindow, WindowAssigner, join::{JoinType as OperatorJoinType, JoinState, JoinedEvent}};
+use crate::operators::{
+    join::{JoinState, JoinType as OperatorJoinType, JoinedEvent},
+    SessionWindow, SlidingWindow, TumblingWindow, WindowAssigner,
+};
 use crate::query::ast::*;
 use async_trait::async_trait;
 use serde_json::json;
@@ -40,24 +43,114 @@ trait StreamingAggregatorHelper: Send + Sync {
 /// Wrapper enum for different aggregation types (type erasure)
 /// Each variant can have a different window type
 enum StreamingAggregatorWrapper {
-    CountTumbling(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::TumblingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Count>>),
-    SumTumbling(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::TumblingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Sum>>),
-    AvgTumbling(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::TumblingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Avg>>),
-    MinTumbling(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::TumblingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Min>>),
-    MaxTumbling(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::TumblingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Max>>),
-    MedianTumbling(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::TumblingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Median>>),
-    CountSliding(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SlidingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Count>>),
-    SumSliding(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SlidingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Sum>>),
-    AvgSliding(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SlidingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Avg>>),
-    MinSliding(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SlidingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Min>>),
-    MaxSliding(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SlidingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Max>>),
-    MedianSliding(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SlidingWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Median>>),
-    CountSession(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SessionWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Count>>),
-    SumSession(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SessionWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Sum>>),
-    AvgSession(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SessionWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Avg>>),
-    MinSession(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SessionWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Min>>),
-    MaxSession(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SessionWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Max>>),
-    MedianSession(crate::execution::streaming_windowed::StreamingWindowedAggregator<crate::operators::SessionWindow, crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Median>>),
+    CountTumbling(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::TumblingWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Count>,
+        >,
+    ),
+    SumTumbling(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::TumblingWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Sum>,
+        >,
+    ),
+    AvgTumbling(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::TumblingWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Avg>,
+        >,
+    ),
+    MinTumbling(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::TumblingWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Min>,
+        >,
+    ),
+    MaxTumbling(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::TumblingWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Max>,
+        >,
+    ),
+    MedianTumbling(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::TumblingWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Median>,
+        >,
+    ),
+    CountSliding(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::SlidingWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Count>,
+        >,
+    ),
+    SumSliding(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::SlidingWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Sum>,
+        >,
+    ),
+    AvgSliding(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::SlidingWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Avg>,
+        >,
+    ),
+    MinSliding(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::SlidingWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Min>,
+        >,
+    ),
+    MaxSliding(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::SlidingWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Max>,
+        >,
+    ),
+    MedianSliding(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::SlidingWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Median>,
+        >,
+    ),
+    CountSession(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::SessionWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Count>,
+        >,
+    ),
+    SumSession(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::SessionWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Sum>,
+        >,
+    ),
+    AvgSession(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::SessionWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Avg>,
+        >,
+    ),
+    MinSession(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::SessionWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Min>,
+        >,
+    ),
+    MaxSession(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::SessionWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Max>,
+        >,
+    ),
+    MedianSession(
+        crate::execution::streaming_windowed::StreamingWindowedAggregator<
+            crate::operators::SessionWindow,
+            crate::execution::streaming_windowed::FieldAwareAgg<crate::operators::Median>,
+        >,
+    ),
 }
 
 impl StreamingAggregatorHelper for StreamingAggregatorWrapper {
@@ -83,7 +176,7 @@ impl StreamingAggregatorHelper for StreamingAggregatorWrapper {
             StreamingAggregatorWrapper::MedianSession(agg) => agg.process_event(event).await,
         }
     }
-    
+
     async fn get_triggered_results_helper(&self) -> Vec<Event> {
         match self {
             StreamingAggregatorWrapper::CountTumbling(agg) => agg.get_triggered_results().await,
@@ -106,7 +199,7 @@ impl StreamingAggregatorHelper for StreamingAggregatorWrapper {
             StreamingAggregatorWrapper::MedianSession(agg) => agg.get_triggered_results().await,
         }
     }
-    
+
     async fn trigger_all_windows_helper(&self) -> crate::error::Result<Vec<Event>> {
         match self {
             StreamingAggregatorWrapper::CountTumbling(agg) => agg.trigger_all_windows().await,
@@ -174,38 +267,47 @@ impl QueryExecutor {
     }
 
     /// Execute the query against a stream and return a new stream
-    pub async fn execute_stream(&self, input_stream: Stream) -> std::result::Result<Stream, QueryExecutionError> {
-        info!("Executing query on stream: {}", self.query.from.primary_stream());
+    pub async fn execute_stream(
+        &self,
+        input_stream: Stream,
+    ) -> std::result::Result<Stream, QueryExecutionError> {
+        info!(
+            "Executing query on stream: {}",
+            self.query.from.primary_stream()
+        );
 
         let mut stream = input_stream;
 
         // Step 1: Apply WHERE filter
         if let Some(ref where_clause) = self.query.where_clause {
             let condition = where_clause.condition.clone();
-            stream = stream.filter(move |event| {
-                match condition.evaluate(event) {
-                    Value::Boolean(b) => b,
-                    _ => false,
-                }
+            stream = stream.filter(move |event| match condition.evaluate(event) {
+                Value::Boolean(b) => b,
+                _ => false,
             });
         }
 
         // Step 2: Apply windowing if specified
         if let Some(ref window_spec) = self.query.window {
             debug!("Applying windowing: {:?}", window_spec);
-            
+
             // For streaming windowed aggregations, process events incrementally
             // This allows continuous processing without blocking on stream.collect()
             if self.is_distributed() {
                 // Distributed mode: collect events for shuffling
-                let events: Vec<Event> = stream.collect().await
-                    .map_err(|e| QueryExecutionError::Execution(format!("Failed to collect events: {}", e)))?;
-                let windowed_events = self.apply_distributed_windowed_aggregations(events, window_spec).await?;
+                let events: Vec<Event> = stream.collect().await.map_err(|e| {
+                    QueryExecutionError::Execution(format!("Failed to collect events: {}", e))
+                })?;
+                let windowed_events = self
+                    .apply_distributed_windowed_aggregations(events, window_spec)
+                    .await?;
                 stream = Stream::from_iter(windowed_events);
             } else {
                 // Local mode: process events in time-based batches for windowed aggregations
                 // This allows continuous processing without blocking on stream.collect()
-                stream = self.execute_streaming_windowed_incremental(stream, window_spec).await?;
+                stream = self
+                    .execute_streaming_windowed_incremental(stream, window_spec)
+                    .await?;
             }
         } else if self.query.aggregations.is_some() || self.query.group_by.is_some() {
             // Aggregations without windowing require batch processing
@@ -215,7 +317,9 @@ impl QueryExecutor {
 
         // Step 3: Apply GROUP BY and aggregations (if not already handled by windowing)
         if self.query.window.is_none() {
-            if let (Some(_group_by), Some(_aggregations)) = (&self.query.group_by, &self.query.aggregations) {
+            if let (Some(_group_by), Some(_aggregations)) =
+                (&self.query.group_by, &self.query.aggregations)
+            {
                 // Group by requires collecting events
                 debug!("GROUP BY with aggregations requires batch processing");
             }
@@ -230,7 +334,7 @@ impl QueryExecutor {
     /// Apply SELECT projection to stream
     fn apply_projection(&self, stream: Stream) -> std::result::Result<Stream, QueryExecutionError> {
         let select_fields = &self.query.select.fields;
-        
+
         // If SELECT *, return stream as-is
         if select_fields.len() == 1 {
             if let SelectField::All = &select_fields[0] {
@@ -240,9 +344,7 @@ impl QueryExecutor {
 
         // Otherwise, project fields
         let fields = select_fields.clone();
-        let projected = stream.map(move |event| {
-            Self::project_event(&event, &fields)
-        });
+        let projected = stream.map(move |event| Self::project_event(&event, &fields));
 
         Ok(projected)
     }
@@ -279,10 +381,28 @@ impl QueryExecutor {
                         }
                     }
                 }
-                SelectField::Aggregation(_agg) => {
-                    // Aggregations are handled separately in windowed/grouped queries
-                    // For now, skip (would need accumulator state)
-                    debug!("Aggregation in projection not yet supported in streaming mode");
+                SelectField::Aggregation(agg) => {
+                    // For windowed queries, aggregations are pre-computed into the event JSON.
+                    // Multi-agg path uses the alias as key; single-agg streaming path uses "value".
+                    let field_name = agg
+                        .alias
+                        .as_ref()
+                        .unwrap_or(&agg.function.to_lowercase())
+                        .clone();
+                    if let EventValue::Json(json) = &event.value {
+                        if let Some(value) = json.get(&field_name).or_else(|| json.get("value")) {
+                            result_json.insert(field_name, value.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Preserve window metadata if present
+        if let EventValue::Json(json) = &event.value {
+            for meta in &["window_start", "window_end"] {
+                if let Some(v) = json.get(*meta) {
+                    result_json.insert(meta.to_string(), v.clone());
                 }
             }
         }
@@ -310,32 +430,41 @@ impl QueryExecutor {
 
         // If distributed and has GROUP BY, execute distributed aggregation
         if self.is_distributed() {
-            if let (Some(ref group_by), Some(ref aggregations)) = (&self.query.group_by, &self.query.aggregations) {
-                return self.execute_distributed_grouped_aggregations(filtered, group_by, aggregations).await;
+            if let (Some(ref group_by), Some(ref aggregations)) =
+                (&self.query.group_by, &self.query.aggregations)
+            {
+                return self
+                    .execute_distributed_grouped_aggregations(filtered, group_by, aggregations)
+                    .await;
             }
-            
+
             // Global aggregations in distributed mode need to collect from all nodes
             if let Some(ref aggregations) = &self.query.aggregations {
-                return self.execute_distributed_global_aggregations(filtered, aggregations).await;
+                return self
+                    .execute_distributed_global_aggregations(filtered, aggregations)
+                    .await;
             }
         }
 
         // Local execution path
         // Apply GROUP BY and aggregations
-        if let (Some(ref group_by), Some(ref aggregations)) = (&self.query.group_by, &self.query.aggregations) {
-            return self.execute_grouped_aggregations(filtered, group_by, aggregations).await;
+        if let (Some(ref group_by), Some(ref aggregations)) =
+            (&self.query.group_by, &self.query.aggregations)
+        {
+            return self
+                .execute_grouped_aggregations(filtered, group_by, aggregations)
+                .await;
         }
 
         // Apply aggregations without GROUP BY
         if let Some(ref aggregations) = &self.query.aggregations {
-            return self.execute_global_aggregations(filtered, aggregations).await;
+            return self
+                .execute_global_aggregations(filtered, aggregations)
+                .await;
         }
 
         // No aggregations, just project
-        Ok(filtered
-            .into_iter()
-            .map(|e| self.project(&e))
-            .collect())
+        Ok(filtered.into_iter().map(|e| self.project(&e)).collect())
     }
 
     /// Apply distributed windowed aggregations
@@ -345,7 +474,9 @@ impl QueryExecutor {
         window_spec: &WindowSpec,
     ) -> std::result::Result<Vec<Event>, QueryExecutionError> {
         let ctx = self.distributed_context.as_ref().ok_or_else(|| {
-            QueryExecutionError::Execution("Distributed context required for distributed windowing".to_string())
+            QueryExecutionError::Execution(
+                "Distributed context required for distributed windowing".to_string(),
+            )
         })?;
 
         info!("Executing distributed windowed aggregation");
@@ -370,7 +501,7 @@ impl QueryExecutor {
             } else {
                 ctx.get_partition_for_event(&event)
             };
-            
+
             events_by_partition
                 .entry(partition)
                 .or_default()
@@ -396,7 +527,8 @@ impl QueryExecutor {
 
         // Aggregate locally
         let local_results = if !local_events.is_empty() {
-            self.apply_windowed_aggregations(local_events, window_spec).await?
+            self.apply_windowed_aggregations(local_events, window_spec)
+                .await?
         } else {
             Vec::new()
         };
@@ -408,17 +540,25 @@ impl QueryExecutor {
                     if let Some(node_addr) = ctx.membership.get_node_address(node_id) {
                         for (partition, events) in partitions_data {
                             let events_len = events.len();
-                            if let Err(e) = shuffle_mgr.shuffle_to_node(
-                                events,
-                                node_id,
-                                partition,
-                                "windowed_aggregation".to_string(),
-                                node_addr,
-                            ).await {
-                                warn!("Failed to shuffle windowed events to node {}: {}", node_id, e);
+                            if let Err(e) = shuffle_mgr
+                                .shuffle_to_node(
+                                    events,
+                                    node_id,
+                                    partition,
+                                    "windowed_aggregation".to_string(),
+                                    node_addr,
+                                )
+                                .await
+                            {
+                                warn!(
+                                    "Failed to shuffle windowed events to node {}: {}",
+                                    node_id, e
+                                );
                             } else {
-                                debug!("Shuffled {} windowed events to node {} for partition {}", 
-                                    events_len, node_id, partition);
+                                debug!(
+                                    "Shuffled {} windowed events to node {} for partition {}",
+                                    events_len, node_id, partition
+                                );
                             }
                         }
                     }
@@ -428,75 +568,69 @@ impl QueryExecutor {
 
         // Collect and merge results from all nodes
         let all_results = self.collect_and_merge_results(local_results, ctx).await?;
-        
+
         Ok(all_results)
     }
 
-    /// Apply streaming windowed aggregations (incremental processing with watermarks)
+    #[allow(dead_code)]
     async fn apply_streaming_windowed_aggregations(
         &self,
         events: Vec<Event>,
         window_spec: &WindowSpec,
     ) -> std::result::Result<Vec<Event>, QueryExecutionError> {
         use crate::execution::streaming_windowed::StreamingWindowConfig;
-        
+
         // Get aggregations
-        let aggregations = self.query.aggregations.as_ref()
-            .ok_or_else(|| QueryExecutionError::Query("Windowed aggregations require aggregation functions".to_string()))?;
-        
+        let aggregations = self.query.aggregations.as_ref().ok_or_else(|| {
+            QueryExecutionError::Query(
+                "Windowed aggregations require aggregation functions".to_string(),
+            )
+        })?;
+
         if aggregations.len() != 1 {
             // For now, only support single aggregation
             return self.apply_windowed_aggregations(events, window_spec).await;
         }
-        
+
         let agg = &aggregations[0];
         let config = StreamingWindowConfig::default();
-        
+
         // Match on both window type and aggregation type to create the right aggregator
         match window_spec.window_type {
-            WindowType::Tumbling => {
-                match window_spec.size {
-                    WindowSize::Time(secs) => {
-                        let assigner = TumblingWindow::of(Duration::from_secs(secs));
-                        self.execute_streaming_windowed_with_agg(events, assigner, agg, config).await
-                    }
-                    WindowSize::Count(_) => {
-                        Err(QueryExecutionError::Execution(
-                            "Count-based windows not yet supported".to_string()
-                        ))
-                    }
+            WindowType::Tumbling => match window_spec.size {
+                WindowSize::Time(secs) => {
+                    let assigner = TumblingWindow::of(Duration::from_secs(secs));
+                    self.execute_streaming_windowed_with_agg(events, assigner, agg, config)
+                        .await
                 }
-            }
-            WindowType::Sliding => {
-                match window_spec.size {
-                    WindowSize::Time(secs) => {
-                        let slide = Duration::from_secs(secs / 2);
-                        let assigner = SlidingWindow::of(Duration::from_secs(secs), slide);
-                        self.execute_streaming_windowed_with_agg(events, assigner, agg, config).await
-                    }
-                    WindowSize::Count(_) => {
-                        Err(QueryExecutionError::Execution(
-                            "Count-based windows not yet supported".to_string()
-                        ))
-                    }
+                WindowSize::Count(_) => Err(QueryExecutionError::Execution(
+                    "Count-based windows not yet supported".to_string(),
+                )),
+            },
+            WindowType::Sliding => match window_spec.size {
+                WindowSize::Time(secs) => {
+                    let slide = Duration::from_secs(secs / 2);
+                    let assigner = SlidingWindow::of(Duration::from_secs(secs), slide);
+                    self.execute_streaming_windowed_with_agg(events, assigner, agg, config)
+                        .await
                 }
-            }
-            WindowType::Session => {
-                match window_spec.size {
-                    WindowSize::Time(secs) => {
-                        let assigner = SessionWindow::with_gap(Duration::from_secs(secs));
-                        self.execute_streaming_windowed_with_agg(events, assigner, agg, config).await
-                    }
-                    WindowSize::Count(_) => {
-                        Err(QueryExecutionError::Execution(
-                            "Count-based windows not yet supported".to_string()
-                        ))
-                    }
+                WindowSize::Count(_) => Err(QueryExecutionError::Execution(
+                    "Count-based windows not yet supported".to_string(),
+                )),
+            },
+            WindowType::Session => match window_spec.size {
+                WindowSize::Time(secs) => {
+                    let assigner = SessionWindow::with_gap(Duration::from_secs(secs));
+                    self.execute_streaming_windowed_with_agg(events, assigner, agg, config)
+                        .await
                 }
-            }
+                WindowSize::Count(_) => Err(QueryExecutionError::Execution(
+                    "Count-based windows not yet supported".to_string(),
+                )),
+            },
         }
     }
-    
+
     /// Execute streaming windowed aggregations incrementally (processes events as they arrive)
     async fn execute_streaming_windowed_incremental(
         &self,
@@ -505,35 +639,40 @@ impl QueryExecutor {
     ) -> std::result::Result<Stream, QueryExecutionError> {
         use crate::execution::streaming_windowed::StreamingWindowConfig;
         use crate::execution::streaming_windowed::{FieldAwareAgg, StreamingWindowedAggregator};
-        use crate::operators::{Avg, Count, Max, Median, Min, Sum, SessionWindow, SlidingWindow, TumblingWindow};
+        use crate::operators::{
+            Avg, Count, Max, Median, Min, SessionWindow, SlidingWindow, Sum, TumblingWindow,
+        };
         use std::time::Duration;
-        
+
         // Get aggregations - required for windowed aggregations
-        let aggregations = self.query.aggregations.as_ref()
-            .ok_or_else(|| QueryExecutionError::Query("Windowed aggregations require aggregation functions".to_string()))?;
-        
+        let aggregations = self.query.aggregations.as_ref().ok_or_else(|| {
+            QueryExecutionError::Query(
+                "Windowed aggregations require aggregation functions".to_string(),
+            )
+        })?;
+
         if aggregations.len() != 1 {
             // For multiple aggregations with GROUP BY, process events in time-based batches
             // Instead of collecting all events (which hangs with HttpSource), process in batches
             warn!("Multiple aggregations in windowed query - processing in time-based batches");
-            
+
             // Get window size in seconds
             let window_secs = match window_spec.size {
                 WindowSize::Time(secs) => secs,
                 _ => 60, // Default to 60 seconds
             };
-            
+
             // Use a simpler approach: process events in time windows using a custom sink
             // that batches and processes windowed aggregations
             let (result_tx, result_rx) = tokio::sync::mpsc::channel(1000);
             let window_spec_clone = window_spec.clone();
             let query_clone = self.query.clone();
-            
+
             // Create a sink that batches events and processes them in time windows
             // Use Arc<Mutex> to share batch state between the sink and periodic processor
             use std::sync::Arc;
             use tokio::sync::Mutex;
-            
+
             struct WindowedBatchSink {
                 batch: Arc<Mutex<Vec<Event>>>,
                 last_batch_time: Arc<Mutex<Instant>>,
@@ -542,7 +681,7 @@ impl QueryExecutor {
                 query: Query,
                 result_tx: tokio::sync::mpsc::Sender<Event>,
             }
-            
+
             impl WindowedBatchSink {
                 async fn process_batch(&self) {
                     let mut batch = self.batch.lock().await;
@@ -550,79 +689,89 @@ impl QueryExecutor {
                         debug!("WindowedBatchSink: batch is empty, skipping");
                         return;
                     }
-                    
+
                     let batch_size = batch.len();
-                    info!("WindowedBatchSink: processing batch of {} events", batch_size);
+                    info!(
+                        "WindowedBatchSink: processing batch of {} events",
+                        batch_size
+                    );
                     let events = batch.clone();
                     batch.clear();
                     drop(batch);
-                    
+
                     let mut last_time = self.last_batch_time.lock().await;
                     *last_time = Instant::now();
                     drop(last_time);
-                    
+
                     // Group events by window manually, then compute all aggregations
-                    use crate::operators::{Window, WindowAssigner, TumblingWindow};
+                    use crate::operators::{TumblingWindow, Window, WindowAssigner};
                     use std::collections::HashMap;
                     use std::time::Duration;
-                    
+
                     // Create window assigner based on window spec
                     let assigner: Box<dyn WindowAssigner> = match self.window_spec.window_type {
-                        crate::query::ast::WindowType::Tumbling => {
-                            match self.window_spec.size {
-                                crate::query::ast::WindowSize::Time(secs) => {
-                                    Box::new(TumblingWindow::of(Duration::from_secs(secs)))
-                                }
-                                _ => {
-                                    warn!("Unsupported window size for batch processing");
-                                    return;
-                                }
+                        crate::query::ast::WindowType::Tumbling => match self.window_spec.size {
+                            crate::query::ast::WindowSize::Time(secs) => {
+                                Box::new(TumblingWindow::of(Duration::from_secs(secs)))
                             }
-                        }
+                            _ => {
+                                warn!("Unsupported window size for batch processing");
+                                return;
+                            }
+                        },
                         _ => {
                             warn!("Unsupported window type for batch processing");
                             return;
                         }
                     };
-                    
+
                     // Group events by window
-                    let mut windows_events: HashMap<(Window, EventKey), Vec<Event>> = HashMap::new();
+                    let mut windows_events: HashMap<(Window, EventKey), Vec<Event>> =
+                        HashMap::new();
                     for event in &events {
                         let windows = assigner.assign_windows(event);
                         for window in windows {
                             let key = event.key.clone();
-                            windows_events.entry((window, key)).or_default().push(event.clone());
+                            windows_events
+                                .entry((window, key))
+                                .or_default()
+                                .push(event.clone());
                         }
                     }
-                    
+
                     // Compute all aggregations for each window
                     let executor = QueryExecutor::new(self.query.clone());
                     let mut results = Vec::new();
-                    
+
                     for ((window, _key), window_events) in &windows_events {
                         let mut result_json = serde_json::Map::new();
-                        
+
                         // Compute all aggregations for this window
                         if let Some(ref aggregations) = executor.query.aggregations {
                             for agg in aggregations {
                                 match executor.compute_aggregation(agg, window_events) {
                                     Ok(value) => {
-                                        let field_name = agg.alias.as_ref()
+                                        let field_name = agg
+                                            .alias
+                                            .as_ref()
                                             .unwrap_or(&agg.function.to_lowercase())
                                             .clone();
                                         result_json.insert(field_name, value);
                                     }
                                     Err(e) => {
-                                        warn!("Failed to compute aggregation {}: {}", agg.function, e);
+                                        warn!(
+                                            "Failed to compute aggregation {}: {}",
+                                            agg.function, e
+                                        );
                                     }
                                 }
                             }
                         }
-                        
+
                         // Add window metadata
                         result_json.insert("window_start".to_string(), json!(window.start));
                         result_json.insert("window_end".to_string(), json!(window.end));
-                        
+
                         let result_event = Event::new(
                             EventKey::default(),
                             EventValue::Json(json!(result_json)),
@@ -630,53 +779,63 @@ impl QueryExecutor {
                         );
                         results.push(result_event);
                     }
-                    
-                    info!("WindowedBatchSink: produced {} windowed events from {} windows", results.len(), windows_events.len());
+
+                    info!(
+                        "WindowedBatchSink: produced {} windowed events from {} windows",
+                        results.len(),
+                        windows_events.len()
+                    );
                     for event in results {
                         if let Err(e) = self.result_tx.send(event).await {
-                            warn!("WindowedBatchSink: failed to send event to result channel: {}", e);
+                            warn!(
+                                "WindowedBatchSink: failed to send event to result channel: {}",
+                                e
+                            );
                         }
                     }
                 }
             }
-            
+
             #[async_trait::async_trait]
             impl crate::sinks::Sink for WindowedBatchSink {
                 async fn write(&mut self, event: Event) -> Result<(), crate::sinks::SinkError> {
                     {
                         let mut batch = self.batch.lock().await;
                         batch.push(event);
-                        debug!("WindowedBatchSink: received event, batch size now: {}", batch.len());
+                        debug!(
+                            "WindowedBatchSink: received event, batch size now: {}",
+                            batch.len()
+                        );
                     }
-                    
+
                     // Check if we should process batch now
                     let should_process = {
                         let last_time = self.last_batch_time.lock().await;
                         last_time.elapsed().as_secs() >= self.window_secs
                     };
-                    
+
                     if should_process {
                         info!("WindowedBatchSink: window time elapsed, processing batch");
                         self.process_batch().await;
                     }
-                    
+
                     Ok(())
                 }
-                
+
                 async fn flush(&mut self) -> Result<(), crate::sinks::SinkError> {
                     self.process_batch().await;
                     Ok(())
                 }
-                
+
                 async fn close(&mut self) -> Result<(), crate::sinks::SinkError> {
                     self.process_batch().await;
                     Ok(())
                 }
             }
-            
+
             let batch = Arc::new(Mutex::new(Vec::<Event>::new()));
             let last_batch_time = Arc::new(Mutex::new(Instant::now()));
-            
+
             let sink = WindowedBatchSink {
                 batch: batch.clone(),
                 last_batch_time: last_batch_time.clone(),
@@ -685,7 +844,7 @@ impl QueryExecutor {
                 query: query_clone.clone(),
                 result_tx: result_tx.clone(),
             };
-            
+
             // Spawn periodic task to process batches every window_secs
             let batch_for_periodic = batch.clone();
             let last_batch_time_for_periodic = last_batch_time.clone();
@@ -693,37 +852,45 @@ impl QueryExecutor {
             let query_for_periodic = query_clone.clone();
             let window_spec_for_periodic = window_spec_clone.clone();
             let result_tx_for_periodic = result_tx.clone();
-            
+
             tokio::spawn(async move {
-                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(window_secs_for_periodic));
+                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(
+                    window_secs_for_periodic,
+                ));
                 // Skip the first tick (it fires immediately)
                 interval.tick().await;
-                
+
                 loop {
                     interval.tick().await;
                     info!("WindowedBatchSink: periodic tick, checking for batch to process");
-                    
+
                     // Check if we should process batch
                     let should_process = {
                         let last_time = last_batch_time_for_periodic.lock().await;
                         last_time.elapsed().as_secs() >= window_secs_for_periodic
                     };
-                    
+
                     if should_process {
                         let mut batch_guard = batch_for_periodic.lock().await;
                         if !batch_guard.is_empty() {
                             let batch_size = batch_guard.len();
-                            info!("WindowedBatchSink: periodic processing batch of {} events", batch_size);
+                            info!(
+                                "WindowedBatchSink: periodic processing batch of {} events",
+                                batch_size
+                            );
                             let events = batch_guard.clone();
                             batch_guard.clear();
                             drop(batch_guard);
-                            
+
                             let mut last_time = last_batch_time_for_periodic.lock().await;
                             *last_time = Instant::now();
                             drop(last_time);
-                            
+
                             let executor = QueryExecutor::new(query_for_periodic.clone());
-                            match executor.apply_windowed_aggregations(events, &window_spec_for_periodic).await {
+                            match executor
+                                .apply_windowed_aggregations(events, &window_spec_for_periodic)
+                                .await
+                            {
                                 Ok(windowed_events) => {
                                     info!("WindowedBatchSink: periodic processing produced {} windowed events", windowed_events.len());
                                     for event in windowed_events {
@@ -740,33 +907,35 @@ impl QueryExecutor {
                             debug!("WindowedBatchSink: periodic tick, but batch is empty");
                         }
                     } else {
-                        debug!("WindowedBatchSink: periodic tick, but window time hasn't elapsed yet");
+                        debug!(
+                            "WindowedBatchSink: periodic tick, but window time hasn't elapsed yet"
+                        );
                     }
                 }
             });
-            
+
             // Spawn task to process stream through sink
             tokio::spawn(async move {
                 if let Err(e) = input_stream.sink(sink).await {
                     warn!("Error processing stream through windowed batch sink: {}", e);
                 }
             });
-            
+
             return Ok(Stream::from_channel(result_rx));
         }
-        
+
         let agg = &aggregations[0];
         let config = StreamingWindowConfig::default();
-        
+
         // Create aggregator based on window type and aggregation function
         // We'll process events incrementally using for_each
         let (result_tx, result_rx) = tokio::sync::mpsc::unbounded_channel();
-        
+
         // Spawn task to process events incrementally
         let window_spec_clone = window_spec.clone();
         let agg_clone = agg.clone();
         let input_stream_for_task = input_stream; // Move stream into task
-        
+
         tokio::spawn(async move {
             // Create aggregator based on window type
             // We'll use the enum directly instead of trait objects (async traits aren't object-safe)
@@ -777,45 +946,55 @@ impl QueryExecutor {
                             let assigner = TumblingWindow::of(Duration::from_secs(secs));
                             match agg_clone.function.to_uppercase().as_str() {
                                 "COUNT" => {
-                                    let agg_fn = FieldAwareAgg::new(Count::new(), agg_clone.field.clone());
+                                    let agg_fn =
+                                        FieldAwareAgg::new(Count::new(), agg_clone.field.clone());
                                     StreamingAggregatorWrapper::CountTumbling(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config),
                                     )
                                 }
                                 "SUM" => {
-                                    let agg_fn = FieldAwareAgg::new(Sum::new(), agg_clone.field.clone());
+                                    let agg_fn =
+                                        FieldAwareAgg::new(Sum::new(), agg_clone.field.clone());
                                     StreamingAggregatorWrapper::SumTumbling(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config),
                                     )
                                 }
                                 "AVG" => {
-                                    let agg_fn = FieldAwareAgg::new(Avg::new(), agg_clone.field.clone());
+                                    let agg_fn =
+                                        FieldAwareAgg::new(Avg::new(), agg_clone.field.clone());
                                     StreamingAggregatorWrapper::AvgTumbling(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config),
                                     )
                                 }
                                 "MIN" => {
-                                    let agg_fn = FieldAwareAgg::new(Min::new(), agg_clone.field.clone());
+                                    let agg_fn =
+                                        FieldAwareAgg::new(Min::new(), agg_clone.field.clone());
                                     StreamingAggregatorWrapper::MinTumbling(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config),
                                     )
                                 }
                                 "MAX" => {
-                                    let agg_fn = FieldAwareAgg::new(Max::new(), agg_clone.field.clone());
+                                    let agg_fn =
+                                        FieldAwareAgg::new(Max::new(), agg_clone.field.clone());
                                     StreamingAggregatorWrapper::MaxTumbling(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config),
                                     )
                                 }
                                 "MEDIAN" => {
-                                    let agg_fn = FieldAwareAgg::new(Median::new(), agg_clone.field.clone());
+                                    let agg_fn =
+                                        FieldAwareAgg::new(Median::new(), agg_clone.field.clone());
                                     StreamingAggregatorWrapper::MedianTumbling(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
+                                        StreamingWindowedAggregator::new(assigner, agg_fn, config),
                                     )
                                 }
                                 _ => {
-                                    warn!("Unsupported aggregation: {}, falling back to batch mode", agg_clone.function);
+                                    warn!(
+                                        "Unsupported aggregation: {}, falling back to batch mode",
+                                        agg_clone.function
+                                    );
                                     // Fall back to batch processing
-                                    let events: Vec<Event> = input_stream_for_task.collect().await.unwrap_or_default();
+                                    let events: Vec<Event> =
+                                        input_stream_for_task.collect().await.unwrap_or_default();
                                     // Send events as individual results (fallback)
                                     for event in events {
                                         let _ = result_tx.send(event);
@@ -826,7 +1005,8 @@ impl QueryExecutor {
                         }
                         WindowSize::Count(_) => {
                             warn!("Count-based windows not supported, falling back to batch mode");
-                            let events: Vec<Event> = input_stream_for_task.collect().await.unwrap_or_default();
+                            let events: Vec<Event> =
+                                input_stream_for_task.collect().await.unwrap_or_default();
                             for event in events {
                                 let _ = result_tx.send(event);
                             }
@@ -834,144 +1014,162 @@ impl QueryExecutor {
                         }
                     }
                 }
-                WindowType::Sliding => {
-                    match window_spec_clone.size {
-                        WindowSize::Time(secs) => {
-                            let slide = Duration::from_secs(secs / 2);
-                            let assigner = SlidingWindow::of(Duration::from_secs(secs), slide);
-                            match agg_clone.function.to_uppercase().as_str() {
-                                "COUNT" => {
-                                    let agg_fn = FieldAwareAgg::new(Count::new(), agg_clone.field.clone());
-                                    StreamingAggregatorWrapper::CountSliding(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
-                                    )
-                                }
-                                "SUM" => {
-                                    let agg_fn = FieldAwareAgg::new(Sum::new(), agg_clone.field.clone());
-                                    StreamingAggregatorWrapper::SumSliding(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
-                                    )
-                                }
-                                "AVG" => {
-                                    let agg_fn = FieldAwareAgg::new(Avg::new(), agg_clone.field.clone());
-                                    StreamingAggregatorWrapper::AvgSliding(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
-                                    )
-                                }
-                                "MIN" => {
-                                    let agg_fn = FieldAwareAgg::new(Min::new(), agg_clone.field.clone());
-                                    StreamingAggregatorWrapper::MinSliding(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
-                                    )
-                                }
-                                "MAX" => {
-                                    let agg_fn = FieldAwareAgg::new(Max::new(), agg_clone.field.clone());
-                                    StreamingAggregatorWrapper::MaxSliding(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
-                                    )
-                                }
-                                "MEDIAN" => {
-                                    let agg_fn = FieldAwareAgg::new(Median::new(), agg_clone.field.clone());
-                                    StreamingAggregatorWrapper::MedianSliding(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
-                                    )
-                                }
-                                _ => {
-                                    warn!("Unsupported aggregation: {}, falling back to batch mode", agg_clone.function);
-                                    let events: Vec<Event> = input_stream_for_task.collect().await.unwrap_or_default();
-                                    for event in events {
-                                        let _ = result_tx.send(event);
-                                    }
-                                    return;
-                                }
+                WindowType::Sliding => match window_spec_clone.size {
+                    WindowSize::Time(secs) => {
+                        let slide = Duration::from_secs(secs / 2);
+                        let assigner = SlidingWindow::of(Duration::from_secs(secs), slide);
+                        match agg_clone.function.to_uppercase().as_str() {
+                            "COUNT" => {
+                                let agg_fn =
+                                    FieldAwareAgg::new(Count::new(), agg_clone.field.clone());
+                                StreamingAggregatorWrapper::CountSliding(
+                                    StreamingWindowedAggregator::new(assigner, agg_fn, config),
+                                )
                             }
-                        }
-                        WindowSize::Count(_) => {
-                            warn!("Count-based windows not supported, falling back to batch mode");
-                            let events: Vec<Event> = input_stream_for_task.collect().await.unwrap_or_default();
-                            for event in events {
-                                let _ = result_tx.send(event);
+                            "SUM" => {
+                                let agg_fn =
+                                    FieldAwareAgg::new(Sum::new(), agg_clone.field.clone());
+                                StreamingAggregatorWrapper::SumSliding(
+                                    StreamingWindowedAggregator::new(assigner, agg_fn, config),
+                                )
                             }
-                            return;
+                            "AVG" => {
+                                let agg_fn =
+                                    FieldAwareAgg::new(Avg::new(), agg_clone.field.clone());
+                                StreamingAggregatorWrapper::AvgSliding(
+                                    StreamingWindowedAggregator::new(assigner, agg_fn, config),
+                                )
+                            }
+                            "MIN" => {
+                                let agg_fn =
+                                    FieldAwareAgg::new(Min::new(), agg_clone.field.clone());
+                                StreamingAggregatorWrapper::MinSliding(
+                                    StreamingWindowedAggregator::new(assigner, agg_fn, config),
+                                )
+                            }
+                            "MAX" => {
+                                let agg_fn =
+                                    FieldAwareAgg::new(Max::new(), agg_clone.field.clone());
+                                StreamingAggregatorWrapper::MaxSliding(
+                                    StreamingWindowedAggregator::new(assigner, agg_fn, config),
+                                )
+                            }
+                            "MEDIAN" => {
+                                let agg_fn =
+                                    FieldAwareAgg::new(Median::new(), agg_clone.field.clone());
+                                StreamingAggregatorWrapper::MedianSliding(
+                                    StreamingWindowedAggregator::new(assigner, agg_fn, config),
+                                )
+                            }
+                            _ => {
+                                warn!(
+                                    "Unsupported aggregation: {}, falling back to batch mode",
+                                    agg_clone.function
+                                );
+                                let events: Vec<Event> =
+                                    input_stream_for_task.collect().await.unwrap_or_default();
+                                for event in events {
+                                    let _ = result_tx.send(event);
+                                }
+                                return;
+                            }
                         }
                     }
-                }
-                WindowType::Session => {
-                    match window_spec_clone.size {
-                        WindowSize::Time(secs) => {
-                            let assigner = SessionWindow::with_gap(Duration::from_secs(secs));
-                            match agg_clone.function.to_uppercase().as_str() {
-                                "COUNT" => {
-                                    let agg_fn = FieldAwareAgg::new(Count::new(), agg_clone.field.clone());
-                                    StreamingAggregatorWrapper::CountSession(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
-                                    )
-                                }
-                                "SUM" => {
-                                    let agg_fn = FieldAwareAgg::new(Sum::new(), agg_clone.field.clone());
-                                    StreamingAggregatorWrapper::SumSession(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
-                                    )
-                                }
-                                "AVG" => {
-                                    let agg_fn = FieldAwareAgg::new(Avg::new(), agg_clone.field.clone());
-                                    StreamingAggregatorWrapper::AvgSession(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
-                                    )
-                                }
-                                "MIN" => {
-                                    let agg_fn = FieldAwareAgg::new(Min::new(), agg_clone.field.clone());
-                                    StreamingAggregatorWrapper::MinSession(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
-                                    )
-                                }
-                                "MAX" => {
-                                    let agg_fn = FieldAwareAgg::new(Max::new(), agg_clone.field.clone());
-                                    StreamingAggregatorWrapper::MaxSession(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
-                                    )
-                                }
-                                "MEDIAN" => {
-                                    let agg_fn = FieldAwareAgg::new(Median::new(), agg_clone.field.clone());
-                                    StreamingAggregatorWrapper::MedianSession(
-                                        StreamingWindowedAggregator::new(assigner, agg_fn, config)
-                                    )
-                                }
-                                _ => {
-                                    warn!("Unsupported aggregation: {}, falling back to batch mode", agg_clone.function);
-                                    let events: Vec<Event> = input_stream_for_task.collect().await.unwrap_or_default();
-                                    for event in events {
-                                        let _ = result_tx.send(event);
-                                    }
-                                    return;
-                                }
-                            }
+                    WindowSize::Count(_) => {
+                        warn!("Count-based windows not supported, falling back to batch mode");
+                        let events: Vec<Event> =
+                            input_stream_for_task.collect().await.unwrap_or_default();
+                        for event in events {
+                            let _ = result_tx.send(event);
                         }
-                        WindowSize::Count(_) => {
-                            warn!("Count-based windows not supported, falling back to batch mode");
-                            let events: Vec<Event> = input_stream_for_task.collect().await.unwrap_or_default();
-                            for event in events {
-                                let _ = result_tx.send(event);
+                        return;
+                    }
+                },
+                WindowType::Session => match window_spec_clone.size {
+                    WindowSize::Time(secs) => {
+                        let assigner = SessionWindow::with_gap(Duration::from_secs(secs));
+                        match agg_clone.function.to_uppercase().as_str() {
+                            "COUNT" => {
+                                let agg_fn =
+                                    FieldAwareAgg::new(Count::new(), agg_clone.field.clone());
+                                StreamingAggregatorWrapper::CountSession(
+                                    StreamingWindowedAggregator::new(assigner, agg_fn, config),
+                                )
                             }
-                            return;
+                            "SUM" => {
+                                let agg_fn =
+                                    FieldAwareAgg::new(Sum::new(), agg_clone.field.clone());
+                                StreamingAggregatorWrapper::SumSession(
+                                    StreamingWindowedAggregator::new(assigner, agg_fn, config),
+                                )
+                            }
+                            "AVG" => {
+                                let agg_fn =
+                                    FieldAwareAgg::new(Avg::new(), agg_clone.field.clone());
+                                StreamingAggregatorWrapper::AvgSession(
+                                    StreamingWindowedAggregator::new(assigner, agg_fn, config),
+                                )
+                            }
+                            "MIN" => {
+                                let agg_fn =
+                                    FieldAwareAgg::new(Min::new(), agg_clone.field.clone());
+                                StreamingAggregatorWrapper::MinSession(
+                                    StreamingWindowedAggregator::new(assigner, agg_fn, config),
+                                )
+                            }
+                            "MAX" => {
+                                let agg_fn =
+                                    FieldAwareAgg::new(Max::new(), agg_clone.field.clone());
+                                StreamingAggregatorWrapper::MaxSession(
+                                    StreamingWindowedAggregator::new(assigner, agg_fn, config),
+                                )
+                            }
+                            "MEDIAN" => {
+                                let agg_fn =
+                                    FieldAwareAgg::new(Median::new(), agg_clone.field.clone());
+                                StreamingAggregatorWrapper::MedianSession(
+                                    StreamingWindowedAggregator::new(assigner, agg_fn, config),
+                                )
+                            }
+                            _ => {
+                                warn!(
+                                    "Unsupported aggregation: {}, falling back to batch mode",
+                                    agg_clone.function
+                                );
+                                let events: Vec<Event> =
+                                    input_stream_for_task.collect().await.unwrap_or_default();
+                                for event in events {
+                                    let _ = result_tx.send(event);
+                                }
+                                return;
+                            }
                         }
                     }
-                }
+                    WindowSize::Count(_) => {
+                        warn!("Count-based windows not supported, falling back to batch mode");
+                        let events: Vec<Event> =
+                            input_stream_for_task.collect().await.unwrap_or_default();
+                        for event in events {
+                            let _ = result_tx.send(event);
+                        }
+                        return;
+                    }
+                },
             };
-            
+
             // Process events incrementally as they arrive
             // Use Stream::sink() which processes events asynchronously
             // Create a custom sink that processes events through the aggregator
             let aggregator_arc = Arc::new(aggregator);
             let result_tx_for_sink = result_tx.clone();
-            
+
             // Create a sink that processes events through the aggregator
             // We'll use the enum directly since async traits aren't object-safe
             struct AggregatorSink {
                 aggregator: Arc<StreamingAggregatorWrapper>,
                 result_tx: tokio::sync::mpsc::UnboundedSender<Event>,
             }
-            
+
             #[async_trait]
             impl crate::sinks::Sink for AggregatorSink {
                 async fn write(&mut self, event: Event) -> Result<(), crate::sinks::SinkError> {
@@ -981,7 +1179,9 @@ impl QueryExecutor {
                             let results = self.aggregator.get_triggered_results_helper().await;
                             for result in results {
                                 if self.result_tx.send(result).is_err() {
-                                    return Err(crate::sinks::SinkError::Other("Result channel closed".to_string()));
+                                    return Err(crate::sinks::SinkError::Other(
+                                        "Result channel closed".to_string(),
+                                    ));
                                 }
                             }
                             Ok(())
@@ -992,11 +1192,11 @@ impl QueryExecutor {
                         }
                     }
                 }
-                
+
                 async fn flush(&mut self) -> Result<(), crate::sinks::SinkError> {
                     Ok(())
                 }
-                
+
                 async fn close(&mut self) -> Result<(), crate::sinks::SinkError> {
                     // Trigger final windows
                     match self.aggregator.trigger_all_windows_helper().await {
@@ -1012,27 +1212,30 @@ impl QueryExecutor {
                     Ok(())
                 }
             }
-            
+
             let sink = AggregatorSink {
                 aggregator: aggregator_arc.clone(),
                 result_tx: result_tx_for_sink.clone(),
             };
-            
+
             // Process stream through aggregator sink in a spawned task
             // This allows the function to return immediately with the result stream
             tokio::spawn(async move {
                 if let Err(e) = input_stream_for_task.sink(sink).await {
                     warn!("Error processing stream through aggregator sink: {}", e);
                 }
-                
+
                 // Trigger final windows (in case close wasn't called)
-                let final_results = aggregator_arc.trigger_all_windows_helper().await.unwrap_or_default();
+                let final_results = aggregator_arc
+                    .trigger_all_windows_helper()
+                    .await
+                    .unwrap_or_default();
                 for result in final_results {
                     let _ = result_tx_for_sink.send(result);
                 }
             });
         });
-        
+
         // Convert UnboundedReceiver to Receiver for Stream::from_channel
         let (bounded_tx, bounded_rx) = tokio::sync::mpsc::channel(1000);
         tokio::spawn(async move {
@@ -1043,11 +1246,11 @@ impl QueryExecutor {
                 }
             }
         });
-        
+
         // Return stream of results
         Ok(Stream::from_channel(bounded_rx))
     }
-    
+
     /// Execute streaming windowed aggregation with specific window assigner and aggregation type
     async fn execute_streaming_windowed_with_agg<W: WindowAssigner + 'static>(
         &self,
@@ -1058,73 +1261,82 @@ impl QueryExecutor {
     ) -> std::result::Result<Vec<Event>, QueryExecutionError> {
         use crate::execution::streaming_windowed::{FieldAwareAgg, StreamingWindowedAggregator};
         use crate::operators::{Avg, Count, Max, Median, Min, Sum};
-        
+
         // Create the appropriate aggregation function based on type
         match agg.function.to_uppercase().as_str() {
             "COUNT" => {
                 let count = Count::new();
                 let agg_fn = FieldAwareAgg::new(count, agg.field.clone());
                 let aggregator = StreamingWindowedAggregator::new(assigner, agg_fn, config);
-                self.process_streaming_aggregator(aggregator, events, agg).await
+                self.process_streaming_aggregator(aggregator, events, agg)
+                    .await
             }
             "SUM" => {
                 let sum = Sum::new();
                 let agg_fn = FieldAwareAgg::new(sum, agg.field.clone());
                 let aggregator = StreamingWindowedAggregator::new(assigner, agg_fn, config);
-                self.process_streaming_aggregator(aggregator, events, agg).await
+                self.process_streaming_aggregator(aggregator, events, agg)
+                    .await
             }
             "AVG" => {
                 let avg = Avg::new();
                 let agg_fn = FieldAwareAgg::new(avg, agg.field.clone());
                 let aggregator = StreamingWindowedAggregator::new(assigner, agg_fn, config);
-                self.process_streaming_aggregator(aggregator, events, agg).await
+                self.process_streaming_aggregator(aggregator, events, agg)
+                    .await
             }
             "MIN" => {
                 let min = Min::new();
                 let agg_fn = FieldAwareAgg::new(min, agg.field.clone());
                 let aggregator = StreamingWindowedAggregator::new(assigner, agg_fn, config);
-                self.process_streaming_aggregator(aggregator, events, agg).await
+                self.process_streaming_aggregator(aggregator, events, agg)
+                    .await
             }
             "MAX" => {
                 let max = Max::new();
                 let agg_fn = FieldAwareAgg::new(max, agg.field.clone());
                 let aggregator = StreamingWindowedAggregator::new(assigner, agg_fn, config);
-                self.process_streaming_aggregator(aggregator, events, agg).await
+                self.process_streaming_aggregator(aggregator, events, agg)
+                    .await
             }
             "MEDIAN" => {
                 let median = Median::new();
                 let agg_fn = FieldAwareAgg::new(median, agg.field.clone());
                 let aggregator = StreamingWindowedAggregator::new(assigner, agg_fn, config);
-                self.process_streaming_aggregator(aggregator, events, agg).await
+                self.process_streaming_aggregator(aggregator, events, agg)
+                    .await
             }
-            _ => {
-                Err(QueryExecutionError::Execution(
-                    format!("Unsupported aggregation function: {}", agg.function)
-                ))
-            }
+            _ => Err(QueryExecutionError::Execution(format!(
+                "Unsupported aggregation function: {}",
+                agg.function
+            ))),
         }
     }
-    
+
     /// Process events through a streaming aggregator and return results
-    async fn process_streaming_aggregator<W: WindowAssigner + 'static, A: crate::operators::AggregateFunction + 'static>(
+    async fn process_streaming_aggregator<
+        W: WindowAssigner + 'static,
+        A: crate::operators::AggregateFunction + 'static,
+    >(
         &self,
         aggregator: crate::execution::streaming_windowed::StreamingWindowedAggregator<W, A>,
         events: Vec<Event>,
         agg: &Aggregation,
     ) -> std::result::Result<Vec<Event>, QueryExecutionError> {
-        
         // Process events incrementally
         for event in &events {
-            aggregator.process_event(event).await
-                .map_err(|e| QueryExecutionError::Execution(format!("Streaming aggregation error: {}", e)))?;
+            aggregator.process_event(event).await.map_err(|e| {
+                QueryExecutionError::Execution(format!("Streaming aggregation error: {}", e))
+            })?;
         }
 
         // Get triggered results
         let mut results = aggregator.get_triggered_results().await;
-        
+
         // Trigger any remaining open windows (for final results)
-        let final_results = aggregator.trigger_all_windows().await
-            .map_err(|e| QueryExecutionError::Execution(format!("Failed to trigger final windows: {}", e)))?;
+        let final_results = aggregator.trigger_all_windows().await.map_err(|e| {
+            QueryExecutionError::Execution(format!("Failed to trigger final windows: {}", e))
+        })?;
         results.extend(final_results);
 
         // Apply projection if needed (add aggregation alias)
@@ -1152,71 +1364,83 @@ impl QueryExecutor {
     ) -> std::result::Result<Vec<Event>, QueryExecutionError> {
         use crate::execution::WindowedStream;
         use std::collections::HashMap;
-        
+
         // Check if we have multiple aggregations - if so, handle them specially
         if let Some(ref aggregations) = self.query.aggregations {
             if aggregations.len() > 1 {
                 // Multiple aggregations: manually group by window and compute all aggregations
                 let assigner: Box<dyn WindowAssigner> = match window_spec.window_type {
-                    WindowType::Tumbling => {
-                        match window_spec.size {
-                            WindowSize::Time(secs) => {
-                                Box::new(TumblingWindow::of(Duration::from_secs(secs)))
-                            }
-                            _ => {
-                                return Err(QueryExecutionError::Execution(
-                                    "Count-based windows not yet supported".to_string()
-                                ));
-                            }
+                    WindowType::Tumbling => match window_spec.size {
+                        WindowSize::Time(secs) => {
+                            Box::new(TumblingWindow::of(Duration::from_secs(secs)))
                         }
-                    }
-                    WindowType::Sliding => {
-                        match window_spec.size {
-                            WindowSize::Time(secs) => {
-                                let slide = Duration::from_secs(secs / 2);
-                                Box::new(SlidingWindow::of(Duration::from_secs(secs), slide))
-                            }
-                            _ => {
-                                return Err(QueryExecutionError::Execution(
-                                    "Count-based windows not yet supported".to_string()
-                                ));
-                            }
+                        _ => {
+                            return Err(QueryExecutionError::Execution(
+                                "Count-based windows not yet supported".to_string(),
+                            ));
                         }
-                    }
-                    WindowType::Session => {
-                        match window_spec.size {
-                            WindowSize::Time(secs) => {
-                                Box::new(SessionWindow::with_gap(Duration::from_secs(secs)))
-                            }
-                            _ => {
-                                return Err(QueryExecutionError::Execution(
-                                    "Count-based windows not yet supported".to_string()
-                                ));
-                            }
+                    },
+                    WindowType::Sliding => match window_spec.size {
+                        WindowSize::Time(secs) => {
+                            let slide = Duration::from_secs(secs / 2);
+                            Box::new(SlidingWindow::of(Duration::from_secs(secs), slide))
                         }
-                    }
+                        _ => {
+                            return Err(QueryExecutionError::Execution(
+                                "Count-based windows not yet supported".to_string(),
+                            ));
+                        }
+                    },
+                    WindowType::Session => match window_spec.size {
+                        WindowSize::Time(secs) => {
+                            Box::new(SessionWindow::with_gap(Duration::from_secs(secs)))
+                        }
+                        _ => {
+                            return Err(QueryExecutionError::Execution(
+                                "Count-based windows not yet supported".to_string(),
+                            ));
+                        }
+                    },
                 };
-                
+
                 // Group events by window
-                let mut windows_events: HashMap<(crate::operators::Window, EventKey), Vec<Event>> = HashMap::new();
+                let mut windows_events: HashMap<(crate::operators::Window, EventKey), Vec<Event>> =
+                    HashMap::new();
                 for event in &events {
                     let windows = assigner.assign_windows(event);
                     for window in windows {
                         let key = event.key.clone();
-                        windows_events.entry((window, key)).or_default().push(event.clone());
+                        windows_events
+                            .entry((window, key))
+                            .or_default()
+                            .push(event.clone());
                     }
                 }
-                
+
                 // Compute all aggregations for each window
                 let mut results = Vec::new();
-                for ((window, _key), window_events) in windows_events {
+                for ((window, key), window_events) in windows_events {
                     let mut result_json = serde_json::Map::new();
-                    
+
+                    // Embed GROUP BY key fields into result
+                    if let Some(ref group_by_fields) = self.query.group_by {
+                        if group_by_fields.len() == 1 {
+                            let key_value = match &key {
+                                EventKey::String(s) => json!(s.as_ref()),
+                                EventKey::Int(i) => json!(i),
+                                _ => json!(key.to_string()),
+                            };
+                            result_json.insert(group_by_fields[0].clone(), key_value);
+                        }
+                    }
+
                     // Compute all aggregations for this window
                     for agg in aggregations {
                         match self.compute_aggregation(agg, &window_events) {
                             Ok(value) => {
-                                let field_name = agg.alias.as_ref()
+                                let field_name = agg
+                                    .alias
+                                    .as_ref()
                                     .unwrap_or(&agg.function.to_lowercase())
                                     .clone();
                                 result_json.insert(field_name, value);
@@ -1226,40 +1450,44 @@ impl QueryExecutor {
                             }
                         }
                     }
-                    
+
                     // Add window metadata
                     result_json.insert("window_start".to_string(), json!(window.start));
                     result_json.insert("window_end".to_string(), json!(window.end));
-                    
+
                     let result_event = Event::new(
-                        EventKey::default(),
+                        EventKey::None,
                         EventValue::Json(json!(result_json)),
                         window.end,
                     );
                     results.push(result_event);
                 }
-                
+
+                // Apply HAVING clause if present
+                if let Some(ref having) = self.query.having {
+                    results.retain(|e| match having.condition.evaluate(e) {
+                        Value::Boolean(b) => b,
+                        _ => false,
+                    });
+                }
+
                 return Ok(results);
             }
         }
-        
+
         // Single aggregation: use the existing WindowedStream approach
         // Create windowed stream based on window type
         match window_spec.window_type {
-            WindowType::Tumbling => {
-                match window_spec.size {
-                    WindowSize::Time(secs) => {
-                        let assigner = TumblingWindow::of(Duration::from_secs(secs));
-                        let windowed = WindowedStream::new(events, assigner);
-                        self.execute_windowed_aggregation(windowed).await
-                    }
-                    WindowSize::Count(_) => {
-                        Err(QueryExecutionError::Execution(
-                            "Count-based windows not yet supported".to_string()
-                        ))
-                    }
+            WindowType::Tumbling => match window_spec.size {
+                WindowSize::Time(secs) => {
+                    let assigner = TumblingWindow::of(Duration::from_secs(secs));
+                    let windowed = WindowedStream::new(events, assigner);
+                    self.execute_windowed_aggregation(windowed).await
                 }
-            }
+                WindowSize::Count(_) => Err(QueryExecutionError::Execution(
+                    "Count-based windows not yet supported".to_string(),
+                )),
+            },
             WindowType::Sliding => {
                 match window_spec.size {
                     WindowSize::Time(secs) => {
@@ -1269,27 +1497,21 @@ impl QueryExecutor {
                         let windowed = WindowedStream::new(events, assigner);
                         self.execute_windowed_aggregation(windowed).await
                     }
-                    WindowSize::Count(_) => {
-                        Err(QueryExecutionError::Execution(
-                            "Count-based windows not yet supported".to_string()
-                        ))
-                    }
+                    WindowSize::Count(_) => Err(QueryExecutionError::Execution(
+                        "Count-based windows not yet supported".to_string(),
+                    )),
                 }
             }
-            WindowType::Session => {
-                match window_spec.size {
-                    WindowSize::Time(secs) => {
-                        let assigner = SessionWindow::with_gap(Duration::from_secs(secs));
-                        let windowed = WindowedStream::new(events, assigner);
-                        self.execute_windowed_aggregation(windowed).await
-                    }
-                    WindowSize::Count(_) => {
-                        Err(QueryExecutionError::Execution(
-                            "Count-based windows not yet supported".to_string()
-                        ))
-                    }
+            WindowType::Session => match window_spec.size {
+                WindowSize::Time(secs) => {
+                    let assigner = SessionWindow::with_gap(Duration::from_secs(secs));
+                    let windowed = WindowedStream::new(events, assigner);
+                    self.execute_windowed_aggregation(windowed).await
                 }
-            }
+                WindowSize::Count(_) => Err(QueryExecutionError::Execution(
+                    "Count-based windows not yet supported".to_string(),
+                )),
+            },
         }
     }
 
@@ -1298,42 +1520,58 @@ impl QueryExecutor {
         &self,
         windowed: crate::execution::WindowedStream<W>,
     ) -> std::result::Result<Vec<Event>, QueryExecutionError> {
-
         // Apply aggregations if specified
         if let Some(ref aggregations) = self.query.aggregations {
             if aggregations.len() == 1 {
                 let agg = &aggregations[0];
                 match agg.function.to_uppercase().as_str() {
                     "COUNT" => {
-                        let results = windowed.count().await
-                            .map_err(|e| QueryExecutionError::Execution(format!("Windowed count failed: {}", e)))?;
+                        let results = windowed.count().await.map_err(|e| {
+                            QueryExecutionError::Execution(format!("Windowed count failed: {}", e))
+                        })?;
                         return Ok(self.window_results_to_events(results, agg));
                     }
                     "SUM" => {
                         if let Some(ref field) = agg.field {
-                            let results = windowed.sum().await
-                                .map_err(|e| QueryExecutionError::Execution(format!("Windowed sum failed: {}", e)))?;
+                            let results = windowed.sum().await.map_err(|e| {
+                                QueryExecutionError::Execution(format!(
+                                    "Windowed sum failed: {}",
+                                    e
+                                ))
+                            })?;
                             return Ok(self.window_sum_results_to_events(results, agg, field));
                         }
                     }
                     "AVG" => {
                         if let Some(ref field) = agg.field {
-                            let results = windowed.avg().await
-                                .map_err(|e| QueryExecutionError::Execution(format!("Windowed avg failed: {}", e)))?;
+                            let results = windowed.avg().await.map_err(|e| {
+                                QueryExecutionError::Execution(format!(
+                                    "Windowed avg failed: {}",
+                                    e
+                                ))
+                            })?;
                             return Ok(self.window_avg_results_to_events(results, agg, field));
                         }
                     }
                     "MIN" => {
                         if let Some(ref field) = agg.field {
-                            let results = windowed.min().await
-                                .map_err(|e| QueryExecutionError::Execution(format!("Windowed min failed: {}", e)))?;
+                            let results = windowed.min().await.map_err(|e| {
+                                QueryExecutionError::Execution(format!(
+                                    "Windowed min failed: {}",
+                                    e
+                                ))
+                            })?;
                             return Ok(self.window_minmax_results_to_events(results, agg, field));
                         }
                     }
                     "MAX" => {
                         if let Some(ref field) = agg.field {
-                            let results = windowed.max().await
-                                .map_err(|e| QueryExecutionError::Execution(format!("Windowed max failed: {}", e)))?;
+                            let results = windowed.max().await.map_err(|e| {
+                                QueryExecutionError::Execution(format!(
+                                    "Windowed max failed: {}",
+                                    e
+                                ))
+                            })?;
                             return Ok(self.window_minmax_results_to_events(results, agg, field));
                         }
                     }
@@ -1344,22 +1582,19 @@ impl QueryExecutor {
                 // WindowedStream consumes self, so we need to extract events first
                 // Since WindowedStream doesn't expose events, we'll need to group them manually
                 // For now, let's use a simpler approach: group events by window using the assigner
-                use crate::operators::Window;
-                use std::collections::HashMap;
-                
                 // We need to access the events from WindowedStream, but it consumes self
                 // The WindowedBatchSink should handle this case, but if we reach here,
                 // we'll compute aggregations on all events grouped by window
-                
+
                 // Actually, WindowedStream has events as a field, but it's private
                 // The best approach: manually group events by window using the assigner
                 // But we don't have access to events here since WindowedStream consumes them
-                
+
                 // Fallback: This code path shouldn't normally be reached for multiple aggregations
                 // because execute_streaming_windowed_incremental uses WindowedBatchSink
                 // But if it is reached, we need to handle it
-                
-                // Since we can't easily extract events from WindowedStream, 
+
+                // Since we can't easily extract events from WindowedStream,
                 // and WindowedBatchSink handles this case, let's just return empty
                 // The real processing happens in WindowedBatchSink
                 warn!("Multiple aggregations in execute_windowed_aggregation - WindowedBatchSink should handle this");
@@ -1369,8 +1604,9 @@ impl QueryExecutor {
 
         // Default: just return windowed events with count
         let count_op = crate::operators::Count;
-        let results = windowed.aggregate_to_events(count_op).await
-            .map_err(|e| QueryExecutionError::Execution(format!("Windowed aggregation failed: {}", e)))?;
+        let results = windowed.aggregate_to_events(count_op).await.map_err(|e| {
+            QueryExecutionError::Execution(format!("Windowed aggregation failed: {}", e))
+        })?;
         Ok(results)
     }
 
@@ -1380,16 +1616,21 @@ impl QueryExecutor {
         results: Vec<(crate::operators::Window, EventKey, i64)>,
         agg: &Aggregation,
     ) -> Vec<Event> {
-        results.into_iter().map(|(window, key, count)| {
-            let mut json = serde_json::Map::new();
-            let field_name = agg.alias.as_ref()
-                .unwrap_or(&agg.function.to_lowercase())
-                .clone();
-            json.insert(field_name, json!(count));
-            json.insert("window_start".to_string(), json!(window.start));
-            json.insert("window_end".to_string(), json!(window.end));
-            Event::new(key, EventValue::Json(json!(json)), window.end)
-        }).collect()
+        results
+            .into_iter()
+            .map(|(window, key, count)| {
+                let mut json = serde_json::Map::new();
+                let field_name = agg
+                    .alias
+                    .as_ref()
+                    .unwrap_or(&agg.function.to_lowercase())
+                    .clone();
+                json.insert(field_name, json!(count));
+                json.insert("window_start".to_string(), json!(window.start));
+                json.insert("window_end".to_string(), json!(window.end));
+                Event::new(key, EventValue::Json(json!(json)), window.end)
+            })
+            .collect()
     }
 
     /// Convert window sum results to events
@@ -1399,16 +1640,21 @@ impl QueryExecutor {
         agg: &Aggregation,
         _field: &str,
     ) -> Vec<Event> {
-        results.into_iter().map(|(window, key, sum)| {
-            let mut json = serde_json::Map::new();
-            let field_name = agg.alias.as_ref()
-                .unwrap_or(&agg.function.to_lowercase())
-                .clone();
-            json.insert(field_name, json!(sum));
-            json.insert("window_start".to_string(), json!(window.start));
-            json.insert("window_end".to_string(), json!(window.end));
-            Event::new(key, EventValue::Json(json!(json)), window.end)
-        }).collect()
+        results
+            .into_iter()
+            .map(|(window, key, sum)| {
+                let mut json = serde_json::Map::new();
+                let field_name = agg
+                    .alias
+                    .as_ref()
+                    .unwrap_or(&agg.function.to_lowercase())
+                    .clone();
+                json.insert(field_name, json!(sum));
+                json.insert("window_start".to_string(), json!(window.start));
+                json.insert("window_end".to_string(), json!(window.end));
+                Event::new(key, EventValue::Json(json!(json)), window.end)
+            })
+            .collect()
     }
 
     /// Convert window avg results to events
@@ -1418,16 +1664,21 @@ impl QueryExecutor {
         agg: &Aggregation,
         _field: &str,
     ) -> Vec<Event> {
-        results.into_iter().map(|(window, key, avg)| {
-            let mut json = serde_json::Map::new();
-            let field_name = agg.alias.as_ref()
-                .unwrap_or(&agg.function.to_lowercase())
-                .clone();
-            json.insert(field_name, json!(avg));
-            json.insert("window_start".to_string(), json!(window.start));
-            json.insert("window_end".to_string(), json!(window.end));
-            Event::new(key, EventValue::Json(json!(json)), window.end)
-        }).collect()
+        results
+            .into_iter()
+            .map(|(window, key, avg)| {
+                let mut json = serde_json::Map::new();
+                let field_name = agg
+                    .alias
+                    .as_ref()
+                    .unwrap_or(&agg.function.to_lowercase())
+                    .clone();
+                json.insert(field_name, json!(avg));
+                json.insert("window_start".to_string(), json!(window.start));
+                json.insert("window_end".to_string(), json!(window.end));
+                Event::new(key, EventValue::Json(json!(json)), window.end)
+            })
+            .collect()
     }
 
     /// Convert window min/max results to events
@@ -1437,16 +1688,21 @@ impl QueryExecutor {
         agg: &Aggregation,
         _field: &str,
     ) -> Vec<Event> {
-        results.into_iter().map(|(window, key, value)| {
-            let mut json = serde_json::Map::new();
-            let field_name = agg.alias.as_ref()
-                .unwrap_or(&agg.function.to_lowercase())
-                .clone();
-            json.insert(field_name, json!(value));
-            json.insert("window_start".to_string(), json!(window.start));
-            json.insert("window_end".to_string(), json!(window.end));
-            Event::new(key, EventValue::Json(json!(json)), window.end)
-        }).collect()
+        results
+            .into_iter()
+            .map(|(window, key, value)| {
+                let mut json = serde_json::Map::new();
+                let field_name = agg
+                    .alias
+                    .as_ref()
+                    .unwrap_or(&agg.function.to_lowercase())
+                    .clone();
+                json.insert(field_name, json!(value));
+                json.insert("window_start".to_string(), json!(window.start));
+                json.insert("window_end".to_string(), json!(window.end));
+                Event::new(key, EventValue::Json(json!(json)), window.end)
+            })
+            .collect()
     }
 
     /// Execute grouped aggregations
@@ -1464,7 +1720,8 @@ impl QueryExecutor {
                 .iter()
                 .filter_map(|field| {
                     if let EventValue::Json(json) = &event.value {
-                        json.get(field).and_then(|v| v.as_str().map(|s| s.to_string()))
+                        json.get(field)
+                            .and_then(|v| v.as_str().map(|s| s.to_string()))
                     } else {
                         None
                     }
@@ -1489,7 +1746,9 @@ impl QueryExecutor {
             // Apply aggregations
             for agg in aggregations {
                 let value = self.compute_aggregation(agg, &group_events)?;
-                let field_name = agg.alias.as_ref()
+                let field_name = agg
+                    .alias
+                    .as_ref()
                     .unwrap_or(&agg.function.to_lowercase())
                     .clone();
                 result_json.insert(field_name, value);
@@ -1505,11 +1764,9 @@ impl QueryExecutor {
 
         // Apply HAVING clause if present
         if let Some(ref having) = self.query.having {
-            results.retain(|e| {
-                match having.condition.evaluate(e) {
-                    Value::Boolean(b) => b,
-                    _ => false,
-                }
+            results.retain(|e| match having.condition.evaluate(e) {
+                Value::Boolean(b) => b,
+                _ => false,
             });
         }
 
@@ -1521,7 +1778,9 @@ impl QueryExecutor {
                     let b_val = Self::get_field_value(b, &field.field);
                     let cmp = match (a_val, b_val) {
                         (Value::Integer(ai), Value::Integer(bi)) => ai.cmp(&bi),
-                        (Value::Float(af), Value::Float(bf)) => af.partial_cmp(&bf).unwrap_or(std::cmp::Ordering::Equal),
+                        (Value::Float(af), Value::Float(bf)) => {
+                            af.partial_cmp(&bf).unwrap_or(std::cmp::Ordering::Equal)
+                        }
                         (Value::String(as_), Value::String(bs)) => as_.cmp(&bs),
                         _ => std::cmp::Ordering::Equal,
                     };
@@ -1555,7 +1814,9 @@ impl QueryExecutor {
 
         for agg in aggregations {
             let value = self.compute_aggregation(agg, &events)?;
-            let field_name = agg.alias.as_ref()
+            let field_name = agg
+                .alias
+                .as_ref()
                 .unwrap_or(&agg.function.to_lowercase())
                 .clone();
             result_json.insert(field_name, value);
@@ -1571,12 +1832,10 @@ impl QueryExecutor {
 
         // Apply HAVING clause if present
         if let Some(ref having) = self.query.having {
-            results.retain(|e| {
-                    match having.condition.evaluate(e) {
-                        Value::Boolean(b) => b,
-                        _ => false,
-                    }
-                });
+            results.retain(|e| match having.condition.evaluate(e) {
+                Value::Boolean(b) => b,
+                _ => false,
+            });
         }
 
         // Apply ORDER BY if present (usually not needed for single result, but support it)
@@ -1587,7 +1846,9 @@ impl QueryExecutor {
                     let b_val = Self::get_field_value(b, &field.field);
                     let cmp = match (a_val, b_val) {
                         (Value::Integer(ai), Value::Integer(bi)) => ai.cmp(&bi),
-                        (Value::Float(af), Value::Float(bf)) => af.partial_cmp(&bf).unwrap_or(std::cmp::Ordering::Equal),
+                        (Value::Float(af), Value::Float(bf)) => {
+                            af.partial_cmp(&bf).unwrap_or(std::cmp::Ordering::Equal)
+                        }
                         (Value::String(as_), Value::String(bs)) => as_.cmp(&bs),
                         _ => std::cmp::Ordering::Equal,
                     };
@@ -1648,7 +1909,8 @@ impl QueryExecutor {
                 let count = if field.is_none() || field == Some(&"*".to_string()) {
                     events.len()
                 } else {
-                    events.iter()
+                    events
+                        .iter()
                         .filter(|e| {
                             if let EventValue::Json(json) = &e.value {
                                 json.get(field.unwrap()).is_some()
@@ -1661,8 +1923,11 @@ impl QueryExecutor {
                 Ok(json!(count))
             }
             "SUM" => {
-                let field = field.ok_or_else(|| QueryExecutionError::Query("SUM requires field name".to_string()))?;
-                let sum: f64 = events.iter()
+                let field = field.ok_or_else(|| {
+                    QueryExecutionError::Query("SUM requires field name".to_string())
+                })?;
+                let sum: f64 = events
+                    .iter()
                     .filter_map(|e| {
                         if let EventValue::Json(json) = &e.value {
                             json.get(field)
@@ -1675,8 +1940,11 @@ impl QueryExecutor {
                 Ok(json!(sum))
             }
             "AVG" => {
-                let field = field.ok_or_else(|| QueryExecutionError::Query("AVG requires field name".to_string()))?;
-                let values: Vec<f64> = events.iter()
+                let field = field.ok_or_else(|| {
+                    QueryExecutionError::Query("AVG requires field name".to_string())
+                })?;
+                let values: Vec<f64> = events
+                    .iter()
                     .filter_map(|e| {
                         if let EventValue::Json(json) = &e.value {
                             json.get(field)
@@ -1694,8 +1962,11 @@ impl QueryExecutor {
                 Ok(json!(avg))
             }
             "MIN" => {
-                let field = field.ok_or_else(|| QueryExecutionError::Query("MIN requires field name".to_string()))?;
-                let min = events.iter()
+                let field = field.ok_or_else(|| {
+                    QueryExecutionError::Query("MIN requires field name".to_string())
+                })?;
+                let min = events
+                    .iter()
                     .filter_map(|e| {
                         if let EventValue::Json(json) = &e.value {
                             json.get(field)
@@ -1705,11 +1976,18 @@ impl QueryExecutor {
                         }
                     })
                     .fold(f64::INFINITY, |a, b| a.min(b));
-                Ok(if min == f64::INFINITY { json!(null) } else { json!(min) })
+                Ok(if min == f64::INFINITY {
+                    json!(null)
+                } else {
+                    json!(min)
+                })
             }
             "MAX" => {
-                let field = field.ok_or_else(|| QueryExecutionError::Query("MAX requires field name".to_string()))?;
-                let max = events.iter()
+                let field = field.ok_or_else(|| {
+                    QueryExecutionError::Query("MAX requires field name".to_string())
+                })?;
+                let max = events
+                    .iter()
                     .filter_map(|e| {
                         if let EventValue::Json(json) = &e.value {
                             json.get(field)
@@ -1719,11 +1997,18 @@ impl QueryExecutor {
                         }
                     })
                     .fold(f64::NEG_INFINITY, |a, b| a.max(b));
-                Ok(if max == f64::NEG_INFINITY { json!(null) } else { json!(max) })
+                Ok(if max == f64::NEG_INFINITY {
+                    json!(null)
+                } else {
+                    json!(max)
+                })
             }
             "MEDIAN" => {
-                let field = field.ok_or_else(|| QueryExecutionError::Query("MEDIAN requires field name".to_string()))?;
-                let mut values: Vec<f64> = events.iter()
+                let field = field.ok_or_else(|| {
+                    QueryExecutionError::Query("MEDIAN requires field name".to_string())
+                })?;
+                let mut values: Vec<f64> = events
+                    .iter()
                     .filter_map(|e| {
                         if let EventValue::Json(json) = &e.value {
                             json.get(field)
@@ -1733,7 +2018,7 @@ impl QueryExecutor {
                         }
                     })
                     .collect();
-                
+
                 if values.is_empty() {
                     Ok(json!(null))
                 } else {
@@ -1750,7 +2035,10 @@ impl QueryExecutor {
                     Ok(json!(median))
                 }
             }
-            _ => Err(QueryExecutionError::Query(format!("Unknown aggregation function: {}", func_name))),
+            _ => Err(QueryExecutionError::Query(format!(
+                "Unknown aggregation function: {}",
+                func_name
+            ))),
         }
     }
 
@@ -1780,13 +2068,20 @@ impl QueryExecutor {
         aggregations: &[Aggregation],
     ) -> std::result::Result<Vec<Event>, QueryExecutionError> {
         let ctx = self.distributed_context.as_ref().ok_or_else(|| {
-            QueryExecutionError::Execution("Distributed context required for distributed execution".to_string())
+            QueryExecutionError::Execution(
+                "Distributed context required for distributed execution".to_string(),
+            )
         })?;
         let _shuffle_mgr = self.shuffle_manager.as_ref().ok_or_else(|| {
-            QueryExecutionError::Execution("Shuffle manager required for distributed execution".to_string())
+            QueryExecutionError::Execution(
+                "Shuffle manager required for distributed execution".to_string(),
+            )
         })?;
 
-        info!("Executing distributed GROUP BY aggregation across {} partitions", ctx.num_partitions);
+        info!(
+            "Executing distributed GROUP BY aggregation across {} partitions",
+            ctx.num_partitions
+        );
 
         // Step 1: Partition events by GROUP BY key hash
         let mut events_by_partition: HashMap<u32, Vec<Event>> = HashMap::new();
@@ -1794,10 +2089,10 @@ impl QueryExecutor {
         for event in events {
             // Extract GROUP BY key from event
             let group_key = self.extract_group_key(&event, group_by);
-            
+
             // Hash the group key to determine partition
             let partition = self.hash_group_key(&group_key, ctx.num_partitions);
-            
+
             events_by_partition
                 .entry(partition)
                 .or_default()
@@ -1820,7 +2115,10 @@ impl QueryExecutor {
                         .or_default()
                         .push((partition, partition_events));
                 } else {
-                    warn!("No node found for partition {}, processing locally", partition);
+                    warn!(
+                        "No node found for partition {}, processing locally",
+                        partition
+                    );
                     local_events.extend(partition_events);
                 }
             }
@@ -1828,7 +2126,8 @@ impl QueryExecutor {
 
         // Step 3: Aggregate locally
         let mut local_results = if !local_events.is_empty() {
-            self.execute_grouped_aggregations(local_events, group_by, aggregations).await?
+            self.execute_grouped_aggregations(local_events, group_by, aggregations)
+                .await?
         } else {
             Vec::new()
         };
@@ -1842,11 +2141,15 @@ impl QueryExecutor {
                         let _events_len = events.len();
                         // Clone events for fallback processing if remote execution fails
                         let events_clone = events.clone();
-                        
+
                         // Serialize query for remote execution
-                        let query_serialized = bincode::serialize(&self.query)
-                            .map_err(|e| QueryExecutionError::Execution(format!("Failed to serialize query: {}", e)))?;
-                        
+                        let query_serialized = bincode::serialize(&self.query).map_err(|e| {
+                            QueryExecutionError::Execution(format!(
+                                "Failed to serialize query: {}",
+                                e
+                            ))
+                        })?;
+
                         // Create request for remote query aggregation execution
                         let request = crate::network::protocol::ExecuteQueryAggregationRequest {
                             query_id: format!("query_{}_{}", ctx.local_node_id, partition),
@@ -1854,14 +2157,26 @@ impl QueryExecutor {
                             events: events.clone(),
                             partition,
                         };
-                        
-                        let payload = bincode::serialize(&request)
-                            .map_err(|e| QueryExecutionError::Execution(format!("Serialization error: {}", e)))?;
-                        
+
+                        let payload = bincode::serialize(&request).map_err(|e| {
+                            QueryExecutionError::Execution(format!("Serialization error: {}", e))
+                        })?;
+
                         // Execute query aggregation remotely via RPC
-                        match rpc_client.call(node_addr, crate::network::protocol::RpcMethod::ExecuteQueryAggregation.as_str(), payload).await {
+                        match rpc_client
+                            .call(
+                                node_addr,
+                                crate::network::protocol::RpcMethod::ExecuteQueryAggregation
+                                    .as_str(),
+                                payload,
+                            )
+                            .await
+                        {
                             Ok(response_payload) => {
-                                match bincode::deserialize::<crate::network::protocol::ExecuteQueryAggregationResponse>(&response_payload) {
+                                match bincode::deserialize::<
+                                    crate::network::protocol::ExecuteQueryAggregationResponse,
+                                >(&response_payload)
+                                {
                                     Ok(response) => {
                                         debug!("Executed query aggregation remotely on node {} for partition {}: {} results", 
                                             node_id, partition, response.results.len());
@@ -1873,7 +2188,13 @@ impl QueryExecutor {
                                     Err(e) => {
                                         warn!("Failed to deserialize query aggregation response from node {}: {}", node_id, e);
                                         // Fallback: process locally
-                                        let fallback_results = self.execute_grouped_aggregations(events_clone, group_by, aggregations).await?;
+                                        let fallback_results = self
+                                            .execute_grouped_aggregations(
+                                                events_clone,
+                                                group_by,
+                                                aggregations,
+                                            )
+                                            .await?;
                                         local_results.extend(fallback_results);
                                     }
                                 }
@@ -1881,7 +2202,13 @@ impl QueryExecutor {
                             Err(e) => {
                                 warn!("Failed to execute query aggregation remotely on node {}: {}, processing locally as fallback", node_id, e);
                                 // Fallback: process locally if remote execution fails (e.g., node unavailable)
-                                let fallback_results = self.execute_grouped_aggregations(events_clone, group_by, aggregations).await?;
+                                let fallback_results = self
+                                    .execute_grouped_aggregations(
+                                        events_clone,
+                                        group_by,
+                                        aggregations,
+                                    )
+                                    .await?;
                                 local_results.extend(fallback_results);
                             }
                         }
@@ -1892,7 +2219,7 @@ impl QueryExecutor {
 
         // Step 5: Collect and merge results from all nodes
         let all_results = self.collect_and_merge_results(local_results, ctx).await?;
-        
+
         // Apply HAVING, ORDER BY, LIMIT/OFFSET
         self.apply_post_aggregation_clauses(all_results).await
     }
@@ -1907,21 +2234,25 @@ impl QueryExecutor {
         // 1. Aggregate locally on each node
         // 2. Shuffle partial results to a coordinator node
         // 3. Merge partial results into final result
-        
+
         let _ctx = self.distributed_context.as_ref().ok_or_else(|| {
-            QueryExecutionError::Execution("Distributed context required for distributed execution".to_string())
+            QueryExecutionError::Execution(
+                "Distributed context required for distributed execution".to_string(),
+            )
         })?;
 
         info!("Executing distributed global aggregation");
 
         // Aggregate locally first
-        let local_results = self.execute_global_aggregations(events, aggregations).await?;
+        let local_results = self
+            .execute_global_aggregations(events, aggregations)
+            .await?;
 
         // In a full implementation, we'd:
         // 1. Send local results to coordinator (typically node 0 or a designated coordinator)
         // 2. Coordinator merges all partial results
         // 3. Return final result
-        
+
         // For now, return local results (in production, this would be merged from all nodes)
         self.apply_post_aggregation_clauses(local_results).await
     }
@@ -1932,7 +2263,8 @@ impl QueryExecutor {
             .iter()
             .filter_map(|field| {
                 if let EventValue::Json(json) = &event.value {
-                    json.get(field).and_then(|v| v.as_str().map(|s| s.to_string()))
+                    json.get(field)
+                        .and_then(|v| v.as_str().map(|s| s.to_string()))
                 } else {
                     None
                 }
@@ -1944,7 +2276,7 @@ impl QueryExecutor {
     fn hash_group_key(&self, group_key: &[String], num_partitions: u32) -> u32 {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         for key_part in group_key {
             key_part.hash(&mut hasher);
@@ -1959,11 +2291,9 @@ impl QueryExecutor {
     ) -> std::result::Result<Vec<Event>, QueryExecutionError> {
         // Apply HAVING clause if present
         if let Some(ref having) = self.query.having {
-            results.retain(|e| {
-                match having.condition.evaluate(e) {
-                    Value::Boolean(b) => b,
-                    _ => false,
-                }
+            results.retain(|e| match having.condition.evaluate(e) {
+                Value::Boolean(b) => b,
+                _ => false,
             });
         }
 
@@ -1975,7 +2305,9 @@ impl QueryExecutor {
                     let b_val = Self::get_field_value(b, &field.field);
                     let cmp = match (a_val, b_val) {
                         (Value::Integer(ai), Value::Integer(bi)) => ai.cmp(&bi),
-                        (Value::Float(af), Value::Float(bf)) => af.partial_cmp(&bf).unwrap_or(std::cmp::Ordering::Equal),
+                        (Value::Float(af), Value::Float(bf)) => {
+                            af.partial_cmp(&bf).unwrap_or(std::cmp::Ordering::Equal)
+                        }
                         (Value::String(as_), Value::String(bs)) => as_.cmp(&bs),
                         _ => std::cmp::Ordering::Equal,
                     };
@@ -2008,7 +2340,7 @@ impl QueryExecutor {
         // If we're the coordinator (typically the first node or local node), collect from all nodes
         // For simplicity, we'll use the local node as coordinator
         let is_coordinator = true; // In production, you'd designate a specific coordinator
-        
+
         if !is_coordinator {
             // If not coordinator, just return local results
             // In a full implementation, we'd send results to coordinator
@@ -2017,35 +2349,53 @@ impl QueryExecutor {
 
         // Coordinator: collect results from all nodes
         let mut all_results = local_results;
-        
+
         if let Some(rpc_client) = &self.rpc_client {
             let nodes = ctx.membership.get_alive_nodes();
             let query_id = format!("query_{}", ctx.local_node_id); // Simple query ID
-            
+
             for node_metadata in nodes {
                 let node_id = node_metadata.id;
                 if node_id == ctx.local_node_id {
                     continue; // Skip self
                 }
-                
+
                 if let Some(node_addr) = ctx.membership.get_node_address(node_id) {
                     // Request results from this node
                     let request = crate::network::protocol::CollectQueryResultsRequest {
                         query_id: query_id.clone(),
                     };
-                    
-                    let payload = bincode::serialize(&request)
-                        .map_err(|e| QueryExecutionError::Execution(format!("Serialization error: {}", e)))?;
-                    
-                    match rpc_client.call(node_addr, crate::network::protocol::RpcMethod::CollectQueryResults.as_str(), payload).await {
+
+                    let payload = bincode::serialize(&request).map_err(|e| {
+                        QueryExecutionError::Execution(format!("Serialization error: {}", e))
+                    })?;
+
+                    match rpc_client
+                        .call(
+                            node_addr,
+                            crate::network::protocol::RpcMethod::CollectQueryResults.as_str(),
+                            payload,
+                        )
+                        .await
+                    {
                         Ok(response_payload) => {
-                            match bincode::deserialize::<crate::network::protocol::CollectQueryResultsResponse>(&response_payload) {
+                            match bincode::deserialize::<
+                                crate::network::protocol::CollectQueryResultsResponse,
+                            >(&response_payload)
+                            {
                                 Ok(response) => {
-                                    debug!("Collected {} results from node {}", response.results.len(), node_id);
+                                    debug!(
+                                        "Collected {} results from node {}",
+                                        response.results.len(),
+                                        node_id
+                                    );
                                     all_results.extend(response.results);
                                 }
                                 Err(e) => {
-                                    warn!("Failed to deserialize results from node {}: {}", node_id, e);
+                                    warn!(
+                                        "Failed to deserialize results from node {}: {}",
+                                        node_id, e
+                                    );
                                 }
                             }
                         }
@@ -2076,45 +2426,67 @@ impl QueryExecutor {
         // Global aggregations need to merge partial results (e.g., sum all sums, avg all avgs)
         // For simplicity, we'll use the local node as coordinator
         let is_coordinator = true; // In production, you'd designate a specific coordinator
-        
+
         if !is_coordinator {
             return Ok(local_results);
         }
 
         let mut all_results = local_results;
-        
+
         if let Some(rpc_client) = &self.rpc_client {
             let nodes = ctx.membership.get_alive_nodes();
             let query_id = format!("query_global_{}", ctx.local_node_id);
-            
+
             for node_metadata in nodes {
                 let node_id = node_metadata.id;
                 if node_id == ctx.local_node_id {
                     continue;
                 }
-                
+
                 if let Some(node_addr) = ctx.membership.get_node_address(node_id) {
                     let request = crate::network::protocol::CollectQueryResultsRequest {
                         query_id: query_id.clone(),
                     };
-                    
-                    let payload = bincode::serialize(&request)
-                        .map_err(|e| QueryExecutionError::Execution(format!("Serialization error: {}", e)))?;
-                    
-                    match rpc_client.call(node_addr, crate::network::protocol::RpcMethod::CollectQueryResults.as_str(), payload).await {
+
+                    let payload = bincode::serialize(&request).map_err(|e| {
+                        QueryExecutionError::Execution(format!("Serialization error: {}", e))
+                    })?;
+
+                    match rpc_client
+                        .call(
+                            node_addr,
+                            crate::network::protocol::RpcMethod::CollectQueryResults.as_str(),
+                            payload,
+                        )
+                        .await
+                    {
                         Ok(response_payload) => {
-                            match bincode::deserialize::<crate::network::protocol::CollectQueryResultsResponse>(&response_payload) {
+                            match bincode::deserialize::<
+                                crate::network::protocol::CollectQueryResultsResponse,
+                            >(&response_payload)
+                            {
                                 Ok(response) => {
                                     // Merge partial aggregation results
-                                    all_results = self.merge_global_aggregation_results(all_results, response.results).await?;
+                                    all_results = self
+                                        .merge_global_aggregation_results(
+                                            all_results,
+                                            response.results,
+                                        )
+                                        .await?;
                                 }
                                 Err(e) => {
-                                    warn!("Failed to deserialize global results from node {}: {}", node_id, e);
+                                    warn!(
+                                        "Failed to deserialize global results from node {}: {}",
+                                        node_id, e
+                                    );
                                 }
                             }
                         }
                         Err(e) => {
-                            warn!("Failed to collect global results from node {}: {}", node_id, e);
+                            warn!(
+                                "Failed to collect global results from node {}: {}",
+                                node_id, e
+                            );
                         }
                     }
                 }
@@ -2133,7 +2505,7 @@ impl QueryExecutor {
     ) -> std::result::Result<Vec<Event>, QueryExecutionError> {
         // Group results by GROUP BY key
         let mut merged_groups: HashMap<Vec<String>, Vec<Event>> = HashMap::new();
-        
+
         for result in results {
             let group_key = self.extract_group_key(&result, group_by);
             merged_groups.entry(group_key).or_default().push(result);
@@ -2141,7 +2513,7 @@ impl QueryExecutor {
 
         // For each group, merge aggregations if there are multiple results
         let mut final_results = Vec::new();
-        
+
         if let Some(ref aggregations) = self.query.aggregations {
             for (group_key, group_results) in merged_groups {
                 if group_results.len() == 1 {
@@ -2149,7 +2521,14 @@ impl QueryExecutor {
                     final_results.push(group_results[0].clone());
                 } else {
                     // Multiple results for same group key - need to merge aggregations
-                    let merged = self.merge_aggregation_results(group_results, aggregations, &group_key, group_by).await?;
+                    let merged = self
+                        .merge_aggregation_results(
+                            group_results,
+                            aggregations,
+                            &group_key,
+                            group_by,
+                        )
+                        .await?;
                     final_results.push(merged);
                 }
             }
@@ -2174,27 +2553,30 @@ impl QueryExecutor {
         group_by: &[String],
     ) -> std::result::Result<Event, QueryExecutionError> {
         use serde_json::json;
-        
+
         let mut merged_json = serde_json::Map::new();
-        
+
         // Add GROUP BY fields
         for (i, field) in group_by.iter().enumerate() {
             if let Some(key_value) = group_key.get(i) {
                 merged_json.insert(field.clone(), json!(key_value));
             }
         }
-        
+
         // Merge each aggregation
         for agg in aggregations {
             let func_name = agg.function.to_uppercase();
-            let field_name = agg.alias.as_ref()
+            let field_name = agg
+                .alias
+                .as_ref()
                 .unwrap_or(&agg.function.to_lowercase())
                 .clone();
-            
+
             match func_name.as_str() {
                 "COUNT" => {
                     // Sum all counts
-                    let total: i64 = results.iter()
+                    let total: i64 = results
+                        .iter()
                         .filter_map(|r| {
                             if let EventValue::Json(json) = &r.value {
                                 json.get(&field_name).and_then(|v| v.as_i64())
@@ -2207,7 +2589,8 @@ impl QueryExecutor {
                 }
                 "SUM" => {
                     // Sum all sums
-                    let total: f64 = results.iter()
+                    let total: f64 = results
+                        .iter()
                         .filter_map(|r| {
                             if let EventValue::Json(json) = &r.value {
                                 json.get(&field_name).and_then(|v| v.as_f64())
@@ -2222,7 +2605,7 @@ impl QueryExecutor {
                     // Weighted average: need to track count and sum
                     let mut total_sum = 0.0;
                     let mut total_count = 0;
-                    
+
                     for r in &results {
                         if let EventValue::Json(json) = &r.value {
                             if let Some(avg) = json.get(&field_name).and_then(|v| v.as_f64()) {
@@ -2233,14 +2616,19 @@ impl QueryExecutor {
                             }
                         }
                     }
-                    
+
                     // This is a simplified merge - in production, we'd track sum and count separately
-                    let merged_avg = if total_count > 0 { total_sum / total_count as f64 } else { 0.0 };
+                    let merged_avg = if total_count > 0 {
+                        total_sum / total_count as f64
+                    } else {
+                        0.0
+                    };
                     merged_json.insert(field_name, json!(merged_avg));
                 }
                 "MIN" => {
                     // Minimum of all minimums
-                    let min_val = results.iter()
+                    let min_val = results
+                        .iter()
                         .filter_map(|r| {
                             if let EventValue::Json(json) = &r.value {
                                 json.get(&field_name).and_then(|v| v.as_f64())
@@ -2255,7 +2643,8 @@ impl QueryExecutor {
                 }
                 "MAX" => {
                     // Maximum of all maximums
-                    let max_val = results.iter()
+                    let max_val = results
+                        .iter()
                         .filter_map(|r| {
                             if let EventValue::Json(json) = &r.value {
                                 json.get(&field_name).and_then(|v| v.as_f64())
@@ -2279,9 +2668,10 @@ impl QueryExecutor {
                             }
                         }
                     }
-                    
+
                     if !all_values.is_empty() {
-                        all_values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                        all_values
+                            .sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
                         let len = all_values.len();
                         let median = if len % 2 == 0 {
                             (all_values[len / 2 - 1] + all_values[len / 2]) / 2.0
@@ -2296,7 +2686,7 @@ impl QueryExecutor {
                 }
             }
         }
-        
+
         Ok(Event::new(
             EventKey::default(),
             EventValue::Json(json!(merged_json)),
@@ -2318,30 +2708,32 @@ impl QueryExecutor {
         if remote_results.is_empty() {
             return Ok(local_results);
         }
-        
+
         // Combine all results and merge aggregations
         let mut all_results = local_results;
         all_results.extend(remote_results);
-        
+
         // Merge into single result
         if let Some(ref aggregations) = self.query.aggregations {
             if let Some(first) = all_results.first() {
                 let mut merged = first.clone();
-                
+
                 // Merge with remaining results
                 for result in all_results.iter().skip(1) {
-                    merged = self.merge_aggregation_results(
-                        vec![merged, result.clone()],
-                        aggregations,
-                        &[],
-                        &[],
-                    ).await?;
+                    merged = self
+                        .merge_aggregation_results(
+                            vec![merged, result.clone()],
+                            aggregations,
+                            &[],
+                            &[],
+                        )
+                        .await?;
                 }
-                
+
                 return Ok(vec![merged]);
             }
         }
-        
+
         Ok(all_results)
     }
 
@@ -2354,14 +2746,19 @@ impl QueryExecutor {
     ) -> std::result::Result<Vec<Event>, QueryExecutionError> {
         // Extract JOIN information from FROM clause
         let (join_type, join_condition, left_alias, right_alias) = match &self.query.from {
-            FromClause::Join { join_type, condition, right, left } => {
+            FromClause::Join {
+                join_type,
+                condition,
+                right,
+                left,
+            } => {
                 // Get aliases
                 let left_alias = match left.as_ref() {
                     FromClause::Single { alias, .. } => alias.clone(),
                     FromClause::Join { .. } => None, // Nested joins not fully supported yet
                 };
                 let right_alias = right.alias.clone();
-                
+
                 // Convert AST JoinType to operator JoinType
                 let op_join_type = match join_type {
                     JoinType::Inner => OperatorJoinType::Inner,
@@ -2369,7 +2766,7 @@ impl QueryExecutor {
                     JoinType::Right => OperatorJoinType::Right,
                     JoinType::Outer => OperatorJoinType::Outer,
                 };
-                
+
                 (op_join_type, condition, left_alias, right_alias)
             }
             _ => return Err(QueryExecutionError::Query("Not a JOIN query".to_string())),
@@ -2377,7 +2774,7 @@ impl QueryExecutor {
 
         // Don't filter events before joining - WHERE clause should be applied after join
         // because it may reference fields from both tables (e.g., "o.amount > 150")
-        
+
         // Extract join keys from events based on JOIN condition
         // The condition is like "left_field = right_field" or "table.field = table.field"
         let left_field = Self::extract_field_name(&join_condition.left_field, &left_alias);
@@ -2388,7 +2785,7 @@ impl QueryExecutor {
             .into_iter()
             .map(|e| Self::rekey_for_join(e, &left_field))
             .collect();
-        
+
         let right_rekeyed: Vec<Event> = right_events
             .into_iter()
             .map(|e| Self::rekey_for_join(e, &right_field))
@@ -2413,11 +2810,9 @@ impl QueryExecutor {
 
         // Apply WHERE filter AFTER join (WHERE clause may reference fields from both tables)
         if let Some(ref where_clause) = self.query.where_clause {
-            results.retain(|e| {
-                match where_clause.condition.evaluate(e) {
-                    Value::Boolean(b) => b,
-                    _ => false,
-                }
+            results.retain(|e| match where_clause.condition.evaluate(e) {
+                Value::Boolean(b) => b,
+                _ => false,
             });
         }
 
@@ -2451,7 +2846,7 @@ impl QueryExecutor {
                 if let Some(s) = value.as_str() {
                     EventKey::from_str(s)
                 } else if let Some(i) = value.as_i64() {
-                    EventKey::from_str(&i.to_string())
+                    EventKey::from_str(i.to_string())
                 } else {
                     event.key.clone()
                 }
@@ -2474,33 +2869,29 @@ impl QueryExecutor {
         let mut result_json = serde_json::Map::new();
 
         // Add left side fields
-        if let Some(left_val) = &joined.left_value {
-            if let EventValue::Json(json) = left_val {
-                if let Some(obj) = json.as_object() {
-                    for (k, v) in obj {
-                        let field_name = if let Some(alias) = left_alias {
-                            format!("{}.{}", alias, k)
-                        } else {
-                            k.clone()
-                        };
-                        result_json.insert(field_name, v.clone());
-                    }
+        if let Some(EventValue::Json(json)) = &joined.left_value {
+            if let Some(obj) = json.as_object() {
+                for (k, v) in obj {
+                    let field_name = if let Some(alias) = left_alias {
+                        format!("{}.{}", alias, k)
+                    } else {
+                        k.clone()
+                    };
+                    result_json.insert(field_name, v.clone());
                 }
             }
         }
 
         // Add right side fields
-        if let Some(right_val) = &joined.right_value {
-            if let EventValue::Json(json) = right_val {
-                if let Some(obj) = json.as_object() {
-                    for (k, v) in obj {
-                        let field_name = if let Some(alias) = right_alias {
-                            format!("{}.{}", alias, k)
-                        } else {
-                            k.clone()
-                        };
-                        result_json.insert(field_name, v.clone());
-                    }
+        if let Some(EventValue::Json(json)) = &joined.right_value {
+            if let Some(obj) = json.as_object() {
+                for (k, v) in obj {
+                    let field_name = if let Some(alias) = right_alias {
+                        format!("{}.{}", alias, k)
+                    } else {
+                        k.clone()
+                    };
+                    result_json.insert(field_name, v.clone());
                 }
             }
         }
@@ -2551,21 +2942,41 @@ mod tests {
     #[tokio::test]
     async fn test_query_executor_median() {
         use crate::query::SqlParser;
-        
+
         let query = SqlParser::parse("SELECT MEDIAN(temperature) FROM events").unwrap();
         let executor = QueryExecutor::new(query);
 
         let events = vec![
-            Event::new(EventKey::default(), EventValue::Json(json!({"temperature": 10})), 0),
-            Event::new(EventKey::default(), EventValue::Json(json!({"temperature": 20})), 0),
-            Event::new(EventKey::default(), EventValue::Json(json!({"temperature": 30})), 0),
-            Event::new(EventKey::default(), EventValue::Json(json!({"temperature": 40})), 0),
-            Event::new(EventKey::default(), EventValue::Json(json!({"temperature": 50})), 0),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"temperature": 10})),
+                0,
+            ),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"temperature": 20})),
+                0,
+            ),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"temperature": 30})),
+                0,
+            ),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"temperature": 40})),
+                0,
+            ),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"temperature": 50})),
+                0,
+            ),
         ];
 
         let results = executor.execute_with_aggregations(events).await.unwrap();
         assert_eq!(results.len(), 1);
-        
+
         if let EventValue::Json(json) = &results[0].value {
             let median = json.get("median").and_then(|v| v.as_f64());
             assert_eq!(median, Some(30.0)); // Median of [10, 20, 30, 40, 50] is 30
@@ -2577,20 +2988,36 @@ mod tests {
     #[tokio::test]
     async fn test_query_executor_median_even_count() {
         use crate::query::SqlParser;
-        
+
         let query = SqlParser::parse("SELECT MEDIAN(temperature) FROM events").unwrap();
         let executor = QueryExecutor::new(query);
 
         let events = vec![
-            Event::new(EventKey::default(), EventValue::Json(json!({"temperature": 10})), 0),
-            Event::new(EventKey::default(), EventValue::Json(json!({"temperature": 20})), 0),
-            Event::new(EventKey::default(), EventValue::Json(json!({"temperature": 30})), 0),
-            Event::new(EventKey::default(), EventValue::Json(json!({"temperature": 40})), 0),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"temperature": 10})),
+                0,
+            ),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"temperature": 20})),
+                0,
+            ),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"temperature": 30})),
+                0,
+            ),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"temperature": 40})),
+                0,
+            ),
         ];
 
         let results = executor.execute_with_aggregations(events).await.unwrap();
         assert_eq!(results.len(), 1);
-        
+
         if let EventValue::Json(json) = &results[0].value {
             let median = json.get("median").and_then(|v| v.as_f64());
             assert_eq!(median, Some(25.0)); // Median of [10, 20, 30, 40] is (20+30)/2 = 25
@@ -2602,27 +3029,65 @@ mod tests {
     #[tokio::test]
     async fn test_join_inner() {
         use crate::query::SqlParser;
-        
-        let query = SqlParser::parse("SELECT * FROM orders o INNER JOIN payments p ON o.id = p.order_id").unwrap();
+
+        let query =
+            SqlParser::parse("SELECT * FROM orders o INNER JOIN payments p ON o.id = p.order_id")
+                .unwrap();
         let executor = QueryExecutor::new(query);
 
         let left_events = vec![
-            Event::new(EventKey::default(), EventValue::Json(json!({"id": 1, "amount": 100})), 0),
-            Event::new(EventKey::default(), EventValue::Json(json!({"id": 2, "amount": 200})), 0),
-            Event::new(EventKey::default(), EventValue::Json(json!({"id": 3, "amount": 300})), 0),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"id": 1, "amount": 100})),
+                0,
+            ),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"id": 2, "amount": 200})),
+                0,
+            ),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"id": 3, "amount": 300})),
+                0,
+            ),
         ];
 
         let right_events = vec![
-            Event::new(EventKey::default(), EventValue::Json(json!({"order_id": 1, "payment_method": "card"})), 0),
-            Event::new(EventKey::default(), EventValue::Json(json!({"order_id": 2, "payment_method": "cash"})), 0),
-            Event::new(EventKey::default(), EventValue::Json(json!({"order_id": 4, "payment_method": "card"})), 0), // No matching order
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"order_id": 1, "payment_method": "card"})),
+                0,
+            ),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"order_id": 2, "payment_method": "cash"})),
+                0,
+            ),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"order_id": 4, "payment_method": "card"})),
+                0,
+            ), // No matching order
         ];
 
-        let results = executor.execute_with_joins(left_events, right_events).await.unwrap();
-        
+        let mut results = executor
+            .execute_with_joins(left_events, right_events)
+            .await
+            .unwrap();
+
         // Should have 2 results (orders 1 and 2 match)
         assert_eq!(results.len(), 2);
-        
+
+        // Sort by o.id for deterministic ordering
+        results.sort_by_key(|e| {
+            if let EventValue::Json(j) = &e.value {
+                j.get("o.id").and_then(|v| v.as_i64()).unwrap_or(i64::MAX)
+            } else {
+                i64::MAX
+            }
+        });
+
         // Check first result (order 1)
         if let EventValue::Json(json) = &results[0].value {
             assert_eq!(json.get("o.id"), Some(&json!(1)));
@@ -2635,22 +3100,40 @@ mod tests {
     #[tokio::test]
     async fn test_join_left() {
         use crate::query::SqlParser;
-        
-        let query = SqlParser::parse("SELECT * FROM orders LEFT JOIN payments ON orders.id = payments.order_id").unwrap();
+
+        let query = SqlParser::parse(
+            "SELECT * FROM orders LEFT JOIN payments ON orders.id = payments.order_id",
+        )
+        .unwrap();
         let executor = QueryExecutor::new(query);
 
         let left_events = vec![
-            Event::new(EventKey::default(), EventValue::Json(json!({"id": 1, "amount": 100})), 0),
-            Event::new(EventKey::default(), EventValue::Json(json!({"id": 2, "amount": 200})), 0),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"id": 1, "amount": 100})),
+                0,
+            ),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"id": 2, "amount": 200})),
+                0,
+            ),
         ];
 
         let right_events = vec![
-            Event::new(EventKey::default(), EventValue::Json(json!({"order_id": 1, "payment_method": "card"})), 0),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"order_id": 1, "payment_method": "card"})),
+                0,
+            ),
             // Order 2 has no payment
         ];
 
-        let results = executor.execute_with_joins(left_events, right_events).await.unwrap();
-        
+        let results = executor
+            .execute_with_joins(left_events, right_events)
+            .await
+            .unwrap();
+
         // Should have 2 results (both orders, order 2 with null payment)
         assert_eq!(results.len(), 2);
     }
@@ -2658,27 +3141,223 @@ mod tests {
     #[tokio::test]
     async fn test_join_with_where() {
         use crate::query::SqlParser;
-        
+
         let query = SqlParser::parse("SELECT * FROM orders o INNER JOIN payments p ON o.id = p.order_id WHERE o.amount > 150").unwrap();
         let executor = QueryExecutor::new(query);
 
         let left_events = vec![
-            Event::new(EventKey::default(), EventValue::Json(json!({"id": 1, "amount": 100})), 0),
-            Event::new(EventKey::default(), EventValue::Json(json!({"id": 2, "amount": 200})), 0),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"id": 1, "amount": 100})),
+                0,
+            ),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"id": 2, "amount": 200})),
+                0,
+            ),
         ];
 
         let right_events = vec![
-            Event::new(EventKey::default(), EventValue::Json(json!({"order_id": 1, "payment_method": "card"})), 0),
-            Event::new(EventKey::default(), EventValue::Json(json!({"order_id": 2, "payment_method": "cash"})), 0),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"order_id": 1, "payment_method": "card"})),
+                0,
+            ),
+            Event::new(
+                EventKey::default(),
+                EventValue::Json(json!({"order_id": 2, "payment_method": "cash"})),
+                0,
+            ),
         ];
 
-        let results = executor.execute_with_joins(left_events, right_events).await.unwrap();
-        
+        let results = executor
+            .execute_with_joins(left_events, right_events)
+            .await
+            .unwrap();
+
         // Should have 1 result (only order 2 has amount > 150)
         assert_eq!(results.len(), 1);
-        
+
         if let EventValue::Json(json) = &results[0].value {
             assert_eq!(json.get("o.id"), Some(&json!(2)));
+        } else {
+            panic!("Expected JSON result");
+        }
+    }
+
+    // --- project_event / apply_projection regression tests ---
+    // These cover the session-6 bug: SelectField::Aggregation was silently dropped.
+
+    fn make_windowed_event(fields: serde_json::Value) -> Event {
+        Event::new(EventKey::None, EventValue::Json(fields), 1000)
+    }
+
+    #[test]
+    fn test_project_event_aggregation_alias_preserved() {
+        use crate::query::SqlParser;
+        // Regression: SelectField::Aggregation used to be silently skipped.
+        let query = SqlParser::parse(
+            "SELECT COUNT(*) AS count, MIN(value) AS min_value, MAX(value) AS max_value \
+             FROM events WINDOW TUMBLING 10 SECONDS",
+        )
+        .unwrap();
+        let executor = QueryExecutor::new(query);
+
+        let event = make_windowed_event(json!({
+            "count": 5,
+            "min_value": 1,
+            "max_value": 10,
+            "window_start": 0,
+            "window_end": 10000,
+        }));
+
+        let projected = QueryExecutor::project_event(&event, &executor.query.select.fields);
+        if let EventValue::Json(json) = projected.value {
+            assert_eq!(json.get("count"), Some(&json!(5)), "count must survive projection");
+            assert_eq!(json.get("min_value"), Some(&json!(1)), "min_value must survive projection");
+            assert_eq!(json.get("max_value"), Some(&json!(10)), "max_value must survive projection");
+            assert_eq!(json.get("window_start"), Some(&json!(0)), "window_start must be preserved");
+            assert_eq!(json.get("window_end"), Some(&json!(10000)), "window_end must be preserved");
+        } else {
+            panic!("Expected JSON result");
+        }
+    }
+
+    #[test]
+    fn test_project_event_aggregation_single_agg_value_fallback() {
+        use crate::query::SqlParser;
+        // Single-agg streaming path stores result under "value", not the alias.
+        // project_event must fall back to "value" and output it under the alias.
+        let query = SqlParser::parse(
+            "SELECT COUNT(*) AS count FROM events WINDOW TUMBLING 10 SECONDS",
+        )
+        .unwrap();
+        let executor = QueryExecutor::new(query);
+
+        let event = make_windowed_event(json!({
+            "value": 7,
+            "window_start": 0,
+            "window_end": 10000,
+            "event_count": 7,
+        }));
+
+        let projected = QueryExecutor::project_event(&event, &executor.query.select.fields);
+        if let EventValue::Json(json) = projected.value {
+            assert_eq!(json.get("count"), Some(&json!(7)), "alias 'count' must map from 'value'");
+        } else {
+            panic!("Expected JSON result");
+        }
+    }
+
+    #[test]
+    fn test_project_event_field_and_all() {
+        use crate::query::SqlParser;
+        // SelectField::Field extracts a named field.
+        let query = SqlParser::parse("SELECT campaign_id, cost FROM events").unwrap();
+        let executor = QueryExecutor::new(query);
+
+        let event = make_windowed_event(json!({
+            "campaign_id": "campaign_holiday_sale",
+            "cost": 0.05,
+            "device": "mobile",
+        }));
+
+        let projected = QueryExecutor::project_event(&event, &executor.query.select.fields);
+        if let EventValue::Json(json) = projected.value {
+            assert_eq!(json.get("campaign_id"), Some(&json!("campaign_holiday_sale")));
+            assert_eq!(json.get("cost"), Some(&json!(0.05)));
+            assert!(json.get("device").is_none(), "device must be excluded");
+        } else {
+            panic!("Expected JSON result");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_apply_windowed_aggregations_group_by_key_embedded() {
+        use crate::query::SqlParser;
+        // Regression: GROUP BY key (e.g. campaign_id) was not embedded in result JSON.
+        let query = SqlParser::parse(
+            "SELECT campaign_id, COUNT(*) AS event_count, SUM(cost) AS total_cost \
+             FROM ad_events GROUP BY campaign_id WINDOW TUMBLING 10 SECONDS",
+        )
+        .unwrap();
+        let executor = QueryExecutor::new(query);
+
+        let window_spec = crate::query::ast::WindowSpec {
+            window_type: crate::query::ast::WindowType::Tumbling,
+            size: crate::query::ast::WindowSize::Time(10),
+        };
+
+        let events = vec![
+            Event::new(
+                EventKey::from_str("campaign_a"),
+                EventValue::Json(json!({"campaign_id": "campaign_a", "cost": 0.10})),
+                1000,
+            ),
+            Event::new(
+                EventKey::from_str("campaign_a"),
+                EventValue::Json(json!({"campaign_id": "campaign_a", "cost": 0.20})),
+                2000,
+            ),
+            Event::new(
+                EventKey::from_str("campaign_b"),
+                EventValue::Json(json!({"campaign_id": "campaign_b", "cost": 0.50})),
+                3000,
+            ),
+        ];
+
+        let results = executor.apply_windowed_aggregations(events, &window_spec).await.unwrap();
+        assert_eq!(results.len(), 2, "two groups expected");
+
+        for result in &results {
+            if let EventValue::Json(json) = &result.value {
+                assert!(
+                    json.get("campaign_id").is_some(),
+                    "campaign_id must be embedded in GROUP BY result"
+                );
+                assert!(json.get("event_count").is_some(), "event_count must be present");
+                assert!(json.get("total_cost").is_some(), "total_cost must be present");
+            } else {
+                panic!("Expected JSON result");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_apply_windowed_aggregations_having_filters() {
+        use crate::query::SqlParser;
+        // HAVING must filter out windowed results in the multi-agg code path
+        // (aggregations.len() > 1 is required to enter that path).
+        let query = SqlParser::parse(
+            "SELECT campaign_id, COUNT(*) AS event_count, SUM(cost) AS total_cost \
+             FROM events GROUP BY campaign_id \
+             HAVING event_count > 1 \
+             WINDOW TUMBLING 10 SECONDS",
+        )
+        .unwrap();
+        let executor = QueryExecutor::new(query);
+
+        let window_spec = crate::query::ast::WindowSpec {
+            window_type: crate::query::ast::WindowType::Tumbling,
+            size: crate::query::ast::WindowSize::Time(10),
+        };
+
+        let events = vec![
+            // campaign_a: 3 events → event_count=3 → passes HAVING > 1
+            Event::new(EventKey::from_str("campaign_a"), EventValue::Json(json!({"campaign_id":"campaign_a","cost":1.0})), 1000),
+            Event::new(EventKey::from_str("campaign_a"), EventValue::Json(json!({"campaign_id":"campaign_a","cost":1.0})), 2000),
+            Event::new(EventKey::from_str("campaign_a"), EventValue::Json(json!({"campaign_id":"campaign_a","cost":1.0})), 3000),
+            // campaign_b: 1 event → event_count=1 → filtered by HAVING > 1
+            Event::new(EventKey::from_str("campaign_b"), EventValue::Json(json!({"campaign_id":"campaign_b","cost":5.0})), 4000),
+        ];
+
+        let results = executor.apply_windowed_aggregations(events, &window_spec).await.unwrap();
+        assert_eq!(results.len(), 1, "only campaign_a with event_count=3 should pass HAVING > 1");
+
+        if let EventValue::Json(json) = &results[0].value {
+            assert_eq!(json.get("campaign_id"), Some(&json!("campaign_a")));
+            assert_eq!(json.get("event_count"), Some(&json!(3)));
         } else {
             panic!("Expected JSON result");
         }

@@ -112,7 +112,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Submit { config, name, daemon, max_restarts, restart_delay, nodes } => {
+        Commands::Submit {
+            config,
+            name,
+            daemon,
+            max_restarts,
+            restart_delay,
+            nodes,
+        } => {
             submit_job(config, name, daemon, max_restarts, restart_delay, nodes).await?;
         }
         Commands::List { verbose, nodes } => {
@@ -121,7 +128,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Status { job_id, nodes } => {
             show_job_status(job_id, nodes).await?;
         }
-        Commands::Stop { job_id, force, nodes } => {
+        Commands::Stop {
+            job_id,
+            force,
+            nodes,
+        } => {
             stop_job(job_id, force, nodes).await?;
         }
         Commands::Validate { config } => {

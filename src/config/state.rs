@@ -20,6 +20,7 @@ pub enum StateBackendType {
     /// In-memory backend (fast, non-persistent)
     Memory,
     /// RocksDB backend (persistent)
+    #[cfg(feature = "rocksdb")]
     RocksDB,
 }
 

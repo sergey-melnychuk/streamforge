@@ -67,7 +67,7 @@ impl Stream {
                 if source.is_exhausted() {
                     return None;
                 }
-                
+
                 // Try to read an event
                 // Keep polling even if read() returns None temporarily (for HttpSource errors/retries)
                 loop {
@@ -76,19 +76,19 @@ impl Stream {
                         // Got an event, yield it
                         return Some((e, source));
                     }
-                    
+
                     // No event this time, but check if source is exhausted
                     if source.is_exhausted() {
                         return None;
                     }
-                    
+
                     // Source not exhausted but returned None (e.g., HttpSource error or no data)
                     // Add a small delay before retrying to avoid tight loop
                     // HttpSource already has its own polling interval, but this prevents
                     // immediate retries if read() returns None quickly
                     use tokio::time::sleep;
                     sleep(std::time::Duration::from_millis(100)).await;
-                    
+
                     // Continue polling - don't end the stream
                     // This allows HttpSource to retry on errors
                 }

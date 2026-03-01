@@ -134,10 +134,14 @@ pub struct JobManager {
 impl JobManager {
     /// Create a new job manager
     pub async fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        // Use default storage directory
-        let storage_dir = dirs::data_dir()
-            .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("streamforge")
+        // Use default storage directory (overridable via STREAMFORGE_DATA_DIR)
+        let storage_dir = std::env::var("STREAMFORGE_DATA_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                dirs::data_dir()
+                    .unwrap_or_else(|| PathBuf::from("/tmp"))
+                    .join("streamforge")
+            })
             .join("jobs");
 
         // Create directory if it doesn't exist
@@ -166,7 +170,11 @@ impl JobManager {
             if existing_job.name == name {
                 use crate::cli::job::JobStatus;
                 if matches!(existing_job.status, JobStatus::Running) {
-                    return Err(format!("Job with name '{}' is already running (ID: {})", name, existing_id).into());
+                    return Err(format!(
+                        "Job with name '{}' is already running (ID: {})",
+                        name, existing_id
+                    )
+                    .into());
                 }
             }
         }
@@ -203,6 +211,7 @@ impl JobManager {
     }
 
     /// Stop a job
+    #[allow(dead_code)]
     pub async fn stop_job(
         &self,
         job_id: &str,

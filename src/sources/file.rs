@@ -195,12 +195,12 @@ impl Source for FileSource {
             Ok((event, reader, exhausted)) => {
                 self.reader = reader;
                 self.exhausted = exhausted;
-                
+
                 // If in follow mode and got EOF, wait a bit before next read
                 if follow && event.is_none() && !exhausted {
                     sleep(Duration::from_millis(100)).await;
                 }
-                
+
                 event
             }
             Err(e) => {

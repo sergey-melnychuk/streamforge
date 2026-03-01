@@ -420,7 +420,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_distributed_context() {
-        let node_id = NodeId::generate();
+        let node_id = NodeId::new(0);
         let membership = Arc::new(ClusterMembership::new(node_id, 30));
 
         // Add local node to membership

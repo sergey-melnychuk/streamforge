@@ -13,6 +13,7 @@ categories = ["concurrency", "database", "network-programming"]
 default = []
 vault = []
 aws-secrets = []
+rocksdb = ["dep:rocksdb"]
 
 [lib]
 name = "streamforge"
@@ -41,11 +42,6 @@ bytes = "1.5"
 # Logging and tracing
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "tracing-log"] }
-opentelemetry = "0.21"
-opentelemetry_sdk = "0.21"
-opentelemetry-otlp = "0.14"
-opentelemetry-jaeger = "0.20"
-tracing-opentelemetry = "0.22"
 
 # Error handling
 thiserror = "1.0"
@@ -53,7 +49,6 @@ anyhow = "1.0"
 async-trait = "0.1"
 
 # Metrics
-metrics = "0.21"
 prometheus = "0.13"
 
 # Time utilities
@@ -71,8 +66,8 @@ toml = "0.8"
 # Random number generation
 rand = "0.8"
 
-# RocksDB for persistent state storage
-rocksdb = "0.21"
+# RocksDB for persistent state storage (optional, gated behind "rocksdb" feature)
+rocksdb = { version = "0.21", optional = true }
 
 # HTTP client for sources
 reqwest = { version = "0.11", features = ["json"] }
@@ -114,8 +109,8 @@ harness = false
 
 [profile.release]
 opt-level = 3
-lto = true
-codegen-units = 1
+#lto = true
+#codegen-units = 1
 panic = "abort"
 
 [profile.bench]

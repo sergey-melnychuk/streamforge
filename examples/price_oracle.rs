@@ -38,6 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         value_path: Some("$.price".to_string()), // Extract price field
         key_path: Some("$.symbol".to_string()),  // Extract symbol field
         headers: vec![("User-Agent".to_string(), "StreamForge/1.0".to_string())],
+        source_log_path: None,
     };
 
     let mut http_source = HttpSource::new(http_config)?;

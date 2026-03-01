@@ -11,6 +11,8 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
+type WindowStateMap<A> = Arc<RwLock<HashMap<(Window, EventKey), WindowState<A>>>>;
 use tracing::{debug, warn};
 
 /// Configuration for streaming windowed aggregations
@@ -52,7 +54,7 @@ where
     /// Aggregation function
     agg_fn: Arc<A>,
     /// Window states: (window, key) -> state
-    window_states: Arc<RwLock<HashMap<(Window, EventKey), WindowState<A>>>>,
+    window_states: WindowStateMap<A>,
     /// Current watermark
     watermark: Arc<RwLock<Watermark>>,
     /// Configuration
@@ -92,7 +94,9 @@ where
             if self.is_late_event(event, &window, watermark) {
                 debug!(
                     "Dropping late event: timestamp={}, window_end={}, watermark={}",
-                    event.timestamp, window.end, watermark.timestamp()
+                    event.timestamp,
+                    window.end,
+                    watermark.timestamp()
                 );
                 continue;
             }
@@ -100,15 +104,15 @@ where
             // Check if window is already closed
             let key = event.key.clone();
             let state_key = (window, key.clone());
-            
+
             let mut states = self.window_states.write().await;
-            let state = states.entry(state_key.clone()).or_insert_with(|| {
-                WindowState {
+            let state = states
+                .entry(state_key.clone())
+                .or_insert_with(|| WindowState {
                     accumulator: self.agg_fn.create_accumulator(),
                     is_closed: false,
                     event_count: 0,
-                }
-            });
+                });
 
             // Only process if window is not closed
             if !state.is_closed {
@@ -126,7 +130,9 @@ where
 
     /// Update watermark based on event timestamp
     async fn update_watermark_from_event(&self, event: &Event) {
-        let watermark_timestamp = event.timestamp.saturating_sub(self.config.max_out_of_orderness);
+        let watermark_timestamp = event
+            .timestamp
+            .saturating_sub(self.config.max_out_of_orderness);
         let new_watermark = Watermark::new(watermark_timestamp);
 
         let mut current = self.watermark.write().await;
@@ -167,7 +173,7 @@ where
                     match self.agg_fn.get_result(&state.accumulator) {
                         Ok(value) => {
                             let (window, key) = state_key;
-                            
+
                             // Create result event
                             let mut result_json = serde_json::Map::new();
                             match &value {
@@ -184,9 +190,9 @@ where
                                 EventValue::Float(f) => {
                                     result_json.insert("value".to_string(), json!(*f));
                                 }
-                            EventValue::String(s) => {
-                                result_json.insert("value".to_string(), json!(s.to_string()));
-                            }
+                                EventValue::String(s) => {
+                                    result_json.insert("value".to_string(), json!(s.to_string()));
+                                }
                                 EventValue::Bool(b) => {
                                     result_json.insert("value".to_string(), json!(*b));
                                 }
@@ -197,7 +203,7 @@ where
                                     // Skip null values
                                 }
                             }
-                            
+
                             result_json.insert("window_start".to_string(), json!(window.start));
                             result_json.insert("window_end".to_string(), json!(window.end));
                             result_json.insert("event_count".to_string(), json!(state.event_count));
@@ -250,7 +256,7 @@ where
                 match self.agg_fn.get_result(&state.accumulator) {
                     Ok(value) => {
                         let (window, key) = state_key.clone();
-                        
+
                         let mut result_json = serde_json::Map::new();
                         match &value {
                             EventValue::Json(json_val) => {
@@ -275,16 +281,13 @@ where
                             EventValue::Bytes(_) => {}
                             EventValue::Null => {}
                         }
-                        
+
                         result_json.insert("window_start".to_string(), json!(window.start));
                         result_json.insert("window_end".to_string(), json!(window.end));
                         result_json.insert("event_count".to_string(), json!(state.event_count));
 
-                        let result_event = Event::new(
-                            key,
-                            EventValue::Json(json!(result_json)),
-                            window.end,
-                        );
+                        let result_event =
+                            Event::new(key, EventValue::Json(json!(result_json)), window.end);
 
                         results.push(result_event);
                     }
@@ -393,37 +396,54 @@ impl AggregationFunction {
 /// Helper to create aggregation function from AST
 pub fn create_aggregation_function(agg: &Aggregation) -> Result<AggregationFunction> {
     use crate::operators::{Avg, Count, Max, Median, Min, Sum};
-    
+
     match agg.function.to_uppercase().as_str() {
         "COUNT" => {
             let count = Count::new();
-            Ok(AggregationFunction::Count(FieldAwareAgg::new(count, agg.field.clone())))
+            Ok(AggregationFunction::Count(FieldAwareAgg::new(
+                count,
+                agg.field.clone(),
+            )))
         }
         "SUM" => {
             let sum = Sum::new();
-            Ok(AggregationFunction::Sum(FieldAwareAgg::new(sum, agg.field.clone())))
+            Ok(AggregationFunction::Sum(FieldAwareAgg::new(
+                sum,
+                agg.field.clone(),
+            )))
         }
         "AVG" => {
             let avg = Avg::new();
-            Ok(AggregationFunction::Avg(FieldAwareAgg::new(avg, agg.field.clone())))
+            Ok(AggregationFunction::Avg(FieldAwareAgg::new(
+                avg,
+                agg.field.clone(),
+            )))
         }
         "MIN" => {
             let min = Min::new();
-            Ok(AggregationFunction::Min(FieldAwareAgg::new(min, agg.field.clone())))
+            Ok(AggregationFunction::Min(FieldAwareAgg::new(
+                min,
+                agg.field.clone(),
+            )))
         }
         "MAX" => {
             let max = Max::new();
-            Ok(AggregationFunction::Max(FieldAwareAgg::new(max, agg.field.clone())))
+            Ok(AggregationFunction::Max(FieldAwareAgg::new(
+                max,
+                agg.field.clone(),
+            )))
         }
         "MEDIAN" => {
             let median = Median::new();
-            Ok(AggregationFunction::Median(FieldAwareAgg::new(median, agg.field.clone())))
+            Ok(AggregationFunction::Median(FieldAwareAgg::new(
+                median,
+                agg.field.clone(),
+            )))
         }
-        _ => {
-            Err(crate::error::StreamError::ProcessingError(
-                format!("Unknown aggregation function: {}", agg.function)
-            ).into())
-        }
+        _ => Err(crate::error::StreamError::ProcessingError(format!(
+            "Unknown aggregation function: {}",
+            agg.function
+        ))),
     }
 }
 
@@ -438,7 +458,7 @@ mod tests {
         let assigner = TumblingWindow::of(Duration::from_secs(60));
         let agg_fn = Count::new();
         let config = StreamingWindowConfig::default();
-        
+
         let aggregator = StreamingWindowedAggregator::new(assigner, agg_fn, config);
 
         // Process events in first window
@@ -449,11 +469,7 @@ mod tests {
         );
         aggregator.process_event(&event1).await.unwrap();
 
-        let event2 = Event::new(
-            EventKey::from_str("key1"),
-            EventValue::from_int(2),
-            2000,
-        );
+        let event2 = Event::new(EventKey::from_str("key1"), EventValue::from_int(2), 2000);
         aggregator.process_event(&event2).await.unwrap();
 
         // Advance watermark past window end to trigger
@@ -469,4 +485,3 @@ mod tests {
         assert!(!results.is_empty());
     }
 }
-

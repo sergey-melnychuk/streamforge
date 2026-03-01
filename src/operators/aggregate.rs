@@ -288,9 +288,7 @@ impl AggregateFunction for Median {
     type Accumulator = MedianAccumulator;
 
     fn create_accumulator(&self) -> Self::Accumulator {
-        MedianAccumulator {
-            values: Vec::new(),
-        }
+        MedianAccumulator { values: Vec::new() }
     }
 
     fn add(&self, acc: &mut Self::Accumulator, event: &Event) -> Result<()> {
@@ -313,7 +311,7 @@ impl AggregateFunction for Median {
 
         let mut sorted = acc.values.clone();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        
+
         let len = sorted.len();
         let median = if len % 2 == 0 {
             // Even number of elements: average of two middle values

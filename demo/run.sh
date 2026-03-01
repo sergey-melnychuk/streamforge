@@ -92,17 +92,16 @@ echo ""
 # Step 2: Start load generators
 echo -e "${BLUE}Step 2: Starting load generators...${NC}"
 
-# Commented out: Other demo jobs
-# cd "$DEMO_DIR/load"
-# ./target/release/ad_event_server > /dev/null 2>&1 &
-# AD_PID=$!
-# PIDS+=($AD_PID)
-# echo "  ✓ Ad Event Server (PID: $AD_PID)"
-# 
-# ./target/release/price_event_server > /dev/null 2>&1 &
-# PRICE_PID=$!
-# PIDS+=($PRICE_PID)
-# echo "  ✓ Price Event Server (PID: $PRICE_PID)"
+cd "$DEMO_DIR/load"
+./target/release/ad_event_server > /dev/null 2>&1 &
+AD_PID=$!
+PIDS+=($AD_PID)
+echo "  ✓ Ad Event Server (PID: $AD_PID)"
+ 
+./target/release/price_event_server > /dev/null 2>&1 &
+PRICE_PID=$!
+PIDS+=($PRICE_PID)
+echo "  ✓ Price Event Server (PID: $PRICE_PID)"
 
 # Start simple counter server
 cd "$DEMO_DIR"
@@ -156,18 +155,17 @@ cd "$PROJECT_ROOT"
 echo ""
 echo -e "${BLUE}Step 5: Submitting jobs...${NC}"
 
-# Commented out: Other demo jobs
-# "$PROJECT_ROOT/target/release/streamforge" submit --config "$DEMO_DIR/jobs/ad_analytics.toml" --daemon --nodes "127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003" 2>&1 | tee /tmp/ad_analytics_submit.log &
-# JOB1_PID=$!
-# PIDS+=($JOB1_PID)
-# echo "  ✓ Ad Analytics job submitted (PID: $JOB1_PID)"
-# 
-# sleep 2
-# 
-# "$PROJECT_ROOT/target/release/streamforge" submit --config "$DEMO_DIR/jobs/price_oracle.toml" --daemon --nodes "127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003" 2>&1 | tee /tmp/price_oracle_submit.log &
-# JOB2_PID=$!
-# PIDS+=($JOB2_PID)
-# echo "  ✓ Price Oracle job submitted (PID: $JOB2_PID)"
+"$PROJECT_ROOT/target/release/streamforge" submit --config "$DEMO_DIR/jobs/ad_analytics.toml" --daemon --nodes "127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003" 2>&1 | tee /tmp/ad_analytics_submit.log &
+JOB1_PID=$!
+PIDS+=($JOB1_PID)
+echo "  ✓ Ad Analytics job submitted (PID: $JOB1_PID)"
+
+sleep 2
+
+"$PROJECT_ROOT/target/release/streamforge" submit --config "$DEMO_DIR/jobs/price_oracle.toml" --daemon --nodes "127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003" 2>&1 | tee /tmp/price_oracle_submit.log &
+JOB2_PID=$!
+PIDS+=($JOB2_PID)
+echo "  ✓ Price Oracle job submitted (PID: $JOB2_PID)"
 
 # Submit simple counter job
 "$PROJECT_ROOT/target/release/streamforge" submit --config "$DEMO_DIR/jobs/simple_counter.toml" --daemon --nodes "127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003" 2>&1 | tee /tmp/simple_counter_submit.log &
@@ -186,18 +184,16 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "Event Servers:"
 echo "  📡 Counter:      http://127.0.0.1:8093/counter"
-# Commented out: Other demo servers
-# echo "  📡 Ad Events:    http://127.0.0.1:8091/event"
-# echo "  📡 Price Events: http://127.0.0.1:8092/event"
+echo "  📡 Ad Events:    http://127.0.0.1:8091/event"
+echo "  📡 Price Events: http://127.0.0.1:8092/event"
 echo ""
 echo "Output File:"
 echo "  📄 Counter Output: /tmp/streamforge_counter_output.jsonl"
 echo ""
-# Commented out: Other demo metrics
-# echo "Metrics:"
-# echo "  📊 Ad Analytics: http://127.0.0.1:9100/metrics"
-# echo "  📊 Price Oracle: http://127.0.0.1:9101/metrics"
-# echo ""
+echo "Metrics:"
+echo "  📊 Ad Analytics: http://127.0.0.1:9100/metrics"
+echo "  📊 Price Oracle: http://127.0.0.1:9101/metrics"
+echo ""
 echo "Cluster Nodes:"
 echo "  🖥️  Node 1: 127.0.0.1:9001 (metrics: 127.0.0.1:9081)"
 echo "  🖥️  Node 2: 127.0.0.1:9002 (metrics: 127.0.0.1:9082)"
@@ -221,4 +217,3 @@ echo ""
 while true; do
     sleep 1
 done
-

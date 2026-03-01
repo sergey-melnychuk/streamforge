@@ -293,7 +293,7 @@ impl Expression {
     /// Evaluate a function call
     fn evaluate_function(name: &str, args: &[Expression], event: &Event) -> Value {
         let func_name = name.to_uppercase();
-        
+
         match func_name.as_str() {
             "UPPER" => {
                 if args.len() != 1 {
@@ -326,7 +326,7 @@ impl Expression {
                 } else {
                     Value::Null
                 };
-                
+
                 match (str_val, start_val, len_val) {
                     (Value::String(s), Value::Integer(start), Value::Integer(len)) => {
                         let start_idx = (start - 1).max(0) as usize;
@@ -445,9 +445,7 @@ impl Expression {
                 let right_val = right.evaluate(event);
                 evaluate_binary_op(&left_val, *op, &right_val)
             }
-            Expression::FunctionCall { name, args } => {
-                Self::evaluate_function(name, args, event)
-            }
+            Expression::FunctionCall { name, args } => Self::evaluate_function(name, args, event),
         }
     }
 }

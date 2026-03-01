@@ -5,9 +5,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::fs;
 use tokio::sync::RwLock;
-use std::sync::Arc;
 
 /// Sink write information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,7 +36,10 @@ pub struct SinkTracker {
 
 impl SinkTracker {
     /// Create a new sink tracker for a job
-    pub async fn new(job_id: &str, storage_dir: &Path) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn new(
+        job_id: &str,
+        storage_dir: &Path,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let storage_dir = storage_dir.join("sink_writes");
         fs::create_dir_all(&storage_dir).await?;
 
@@ -77,13 +80,15 @@ impl SinkTracker {
 
         {
             let mut writes = self.writes.write().await;
-            let write = writes.entry(sink_id.to_string()).or_insert_with(|| SinkWrite {
-                sink_id: sink_id.to_string(),
-                last_written: 0,
-                last_transaction_id: None,
-                last_updated: now,
-                events_written: 0,
-            });
+            let write = writes
+                .entry(sink_id.to_string())
+                .or_insert_with(|| SinkWrite {
+                    sink_id: sink_id.to_string(),
+                    last_written: 0,
+                    last_transaction_id: None,
+                    last_updated: now,
+                    events_written: 0,
+                });
 
             write.last_written = position;
             write.last_transaction_id = transaction_id;
@@ -112,4 +117,3 @@ impl SinkTracker {
         self.writes.read().await.clone()
     }
 }
-

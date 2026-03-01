@@ -47,16 +47,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let transport1_temp = Arc::new(Transport::bind(node1_addr).await?);
     let transport2_temp = Arc::new(Transport::bind(node2_addr).await?);
     let transport3_temp = Arc::new(Transport::bind(node3_addr).await?);
-    
+
     let actual_node1_addr = transport1_temp.local_addr();
     let actual_node2_addr = transport2_temp.local_addr();
     let actual_node3_addr = transport3_temp.local_addr();
-    
+
     // Drop temporary transports
     drop(transport1_temp);
     drop(transport2_temp);
     drop(transport3_temp);
-    
+
     let node1 = NodeMetadata::new(node1_id, actual_node1_addr);
     let node2 = NodeMetadata::new(node2_id, actual_node2_addr);
     let node3 = NodeMetadata::new(node3_id, actual_node3_addr);

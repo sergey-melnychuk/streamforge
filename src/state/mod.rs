@@ -14,6 +14,7 @@ pub mod backend;
 pub mod checkpoint;
 pub mod idempotent;
 pub mod memory;
+#[cfg(feature = "rocksdb")]
 pub mod rocksdb;
 pub mod ttl;
 
@@ -21,5 +22,6 @@ pub use backend::{StateBackend, StateError, StateResult};
 pub use checkpoint::{CheckpointError, CheckpointManager, CheckpointMetadata, CheckpointResult};
 pub use idempotent::IdempotentStateBackend;
 pub use memory::MemoryStateBackend;
+#[cfg(feature = "rocksdb")]
 pub use rocksdb::RocksDBStateBackend;
 pub use ttl::{CleanupPolicy, TtlConfig, TtlStateBackend};

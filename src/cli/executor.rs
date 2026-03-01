@@ -6,8 +6,8 @@ use crate::cli::sink_tracker::SinkTracker;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use streamforge::config::Config;
 use streamforge::execution::Stream;
@@ -44,7 +44,11 @@ impl JobExecutor {
     }
 
     /// Create a new job executor with daemon mode enabled
-    pub fn new_daemon(manager: Arc<JobManager>, max_restarts: u32, restart_delay: Duration) -> Self {
+    pub fn new_daemon(
+        manager: Arc<JobManager>,
+        max_restarts: u32,
+        restart_delay: Duration,
+    ) -> Self {
         Self {
             manager,
             running_jobs: Arc::new(RwLock::new(std::collections::HashMap::new())),
@@ -97,10 +101,10 @@ impl JobExecutor {
 
         let executor_running_jobs = self.running_jobs.clone();
         let job_id_for_cleanup = job_id.to_string();
-        
+
         let handle = tokio::spawn(async move {
             let mut restart_count = 0;
-            
+
             loop {
                 // Execute the job
                 match Self::execute_job(&job_name, &config, &job_id_clone).await {
@@ -118,18 +122,21 @@ impl JobExecutor {
                     Err(e) => {
                         error!("Job {} failed: {}", job_id_clone, e);
                         restart_count += 1;
-                        
+
                         // Update job status
                         {
                             let mut jobs = manager.jobs.write().await;
                             if let Some(job) = jobs.get_mut(&job_id_clone) {
-                                job.fail(format!("{} (restart {}/{})", e, restart_count, max_restarts));
+                                job.fail(format!(
+                                    "{} (restart {}/{})",
+                                    e, restart_count, max_restarts
+                                ));
                                 let job = job.clone();
                                 drop(jobs);
                                 let _ = manager.save_job(&job).await;
                             }
                         }
-                        
+
                         // Check if we should restart
                         if daemon_mode && restart_count <= max_restarts {
                             warn!(
@@ -137,7 +144,7 @@ impl JobExecutor {
                                 job_id_clone, restart_delay, restart_count, max_restarts
                             );
                             sleep(restart_delay).await;
-                            
+
                             // Reset job status for restart
                             {
                                 let mut jobs = manager.jobs.write().await;
@@ -148,7 +155,7 @@ impl JobExecutor {
                                     let _ = manager.save_job(&job).await;
                                 }
                             }
-                            
+
                             // Continue loop to restart
                             continue;
                         } else {
@@ -164,7 +171,7 @@ impl JobExecutor {
                     }
                 }
             }
-            
+
             // Remove job from running_jobs when done (completed or failed permanently)
             let mut running = executor_running_jobs.write().await;
             running.remove(&job_id_for_cleanup);
@@ -236,10 +243,14 @@ impl JobExecutor {
             .as_ref()
             .ok_or_else(|| "Job definition not found in config".to_string())?;
 
-        // Setup offset and sink tracking
-        let storage_dir = dirs::data_dir()
-            .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("streamforge")
+        // Setup offset and sink tracking (overridable via STREAMFORGE_DATA_DIR)
+        let storage_dir = std::env::var("STREAMFORGE_DATA_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                dirs::data_dir()
+                    .unwrap_or_else(|| PathBuf::from("/tmp"))
+                    .join("streamforge")
+            })
             .join("jobs");
         let offset_tracker = OffsetTracker::new(job_id, &storage_dir).await?;
         let sink_tracker = SinkTracker::new(job_id, &storage_dir).await?;
@@ -301,34 +312,42 @@ impl JobExecutor {
             info!("Executing SQL query: {}", sql_query);
             let query = streamforge::query::SqlParser::parse(sql_query)
                 .map_err(|e| format!("SQL parse error: {}", e))?;
-            
+
             let executor = streamforge::query::QueryExecutor::new(query.clone());
-            
+
             // Check if query has window specification - use streaming windowed aggregations
             let has_window = query.window.is_some();
             let has_aggregations = query.aggregations.is_some() || query.group_by.is_some();
-            
+
             if has_window && has_aggregations {
                 // Use streaming windowed aggregations for continuous processing
                 info!("Using streaming windowed aggregations for windowed query");
-                stream = executor.execute_stream(stream).await
+                stream = executor
+                    .execute_stream(stream)
+                    .await
                     .map_err(|e| format!("Query execution error: {}", e))?;
             } else if has_aggregations && !has_window {
                 // Non-windowed aggregations: collect events for batch processing
                 // Note: This will block on continuous streams - consider using windows
                 warn!("Non-windowed aggregations will collect all events - this may block on continuous streams");
-                let events: Vec<streamforge::core::Event> = stream.collect().await
+                let events: Vec<streamforge::core::Event> = stream
+                    .collect()
+                    .await
                     .map_err(|e| format!("Failed to collect events: {}", e))?;
-                
+
                 // Execute with aggregations
-                let results = executor.execute_with_aggregations(events).await
+                let results = executor
+                    .execute_with_aggregations(events)
+                    .await
                     .map_err(|e| format!("Query execution error: {}", e))?;
-                
+
                 // Convert results back to stream
                 stream = streamforge::execution::Stream::from_iter(results);
             } else {
                 // Execute as streaming query (no aggregations)
-                stream = executor.execute_stream(stream).await
+                stream = executor
+                    .execute_stream(stream)
+                    .await
                     .map_err(|e| format!("Query execution error: {}", e))?;
             }
         } else {
@@ -355,11 +374,11 @@ impl JobExecutor {
         let sink_id = Self::get_sink_id(&job_def.sink);
         info!("Sink ID: {}", sink_id);
         info!("Starting pipeline execution...");
-        
+
         // Track events processed
         let mut events_processed = 0u64;
         let mut current_offset = last_offset.unwrap_or(0);
-        
+
         // Execute pipeline with offset and write tracking
         info!("Pipeline starting - will process events and write to sink");
         let result = Self::execute_pipeline_with_tracking(
@@ -372,8 +391,9 @@ impl JobExecutor {
             job_id,
             &mut events_processed,
             &mut current_offset,
-        ).await;
-        
+        )
+        .await;
+
         info!("Pipeline completed. Events processed: {}", events_processed);
 
         if shutdown.load(Ordering::Relaxed) {
@@ -397,7 +417,9 @@ impl JobExecutor {
     fn get_source_id(source_config: &streamforge::config::SourceConfig) -> String {
         match source_config {
             streamforge::config::SourceConfig::File { path, .. } => format!("file:{}", path),
-            streamforge::config::SourceConfig::Http { urls, .. } => format!("http:{}", urls.join(",")),
+            streamforge::config::SourceConfig::Http { urls, .. } => {
+                format!("http:{}", urls.join(","))
+            }
         }
     }
 
@@ -406,7 +428,10 @@ impl JobExecutor {
         match sink_config {
             streamforge::config::SinkConfig::File { path, .. } => format!("file:{}", path),
             streamforge::config::SinkConfig::Metrics { http_endpoint, .. } => {
-                format!("metrics:{}", http_endpoint.as_ref().map(|s| s.as_str()).unwrap_or("none"))
+                format!(
+                    "metrics:{}",
+                    http_endpoint.as_ref().map(|s| s.as_str()).unwrap_or("none")
+                )
             }
         }
     }
@@ -417,7 +442,11 @@ impl JobExecutor {
         _start_offset: Option<u64>,
     ) -> Result<Stream, Box<dyn std::error::Error + Send + Sync>> {
         match source_config {
-            streamforge::config::SourceConfig::File { path, format, follow } => {
+            streamforge::config::SourceConfig::File {
+                path,
+                format,
+                follow,
+            } => {
                 let config = streamforge::sources::file::FileSourceConfig {
                     path: path.clone(),
                     format: format.clone(),
@@ -458,19 +487,29 @@ impl JobExecutor {
         job_id: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match sink_config {
-            streamforge::config::SinkConfig::File { path, format, append } => {
+            streamforge::config::SinkConfig::File {
+                path,
+                format,
+                append,
+            } => {
                 let config = streamforge::sinks::file::FileSinkConfig {
                     path: path.clone(),
                     format: format.clone(),
                     append: *append,
                 };
                 let sink = FileSink::new(config)?;
-                stream.sink(sink).await.map_err(|e| format!("Pipeline execution failed: {}", e).into())
+                stream
+                    .sink(sink)
+                    .await
+                    .map_err(|e| format!("Pipeline execution failed: {}", e).into())
             }
-            streamforge::config::SinkConfig::Metrics { prefix, http_endpoint } => {
-                use streamforge::sinks::metrics::MetricsSinkConfig;
+            streamforge::config::SinkConfig::Metrics {
+                prefix,
+                http_endpoint,
+            } => {
                 use std::net::SocketAddr;
-                
+                use streamforge::sinks::metrics::MetricsSinkConfig;
+
                 // Parse endpoint - if provided, use it; otherwise generate one based on job_id to avoid conflicts
                 let final_endpoint = if let Some(endpoint_str) = http_endpoint.as_ref() {
                     endpoint_str.parse::<SocketAddr>().ok()
@@ -481,8 +520,11 @@ impl JobExecutor {
                     let port = 9100 + (hasher.finish() % 100) as u16; // Ports 9100-9199
                     format!("127.0.0.1:{}", port).parse::<SocketAddr>().ok()
                 };
-                
-                info!("Creating metrics sink with prefix: '{}', endpoint: {:?}", prefix, final_endpoint);
+
+                info!(
+                    "Creating metrics sink with prefix: '{}', endpoint: {:?}",
+                    prefix, final_endpoint
+                );
                 let config = MetricsSinkConfig {
                     metric_prefix: prefix.clone(),
                     http_endpoint: final_endpoint,
@@ -493,7 +535,10 @@ impl JobExecutor {
                 // Give HTTP server a moment to start
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 info!("Starting to process events and write to metrics sink...");
-                stream.sink(sink).await.map_err(|e| format!("Pipeline execution failed: {}", e).into())
+                stream
+                    .sink(sink)
+                    .await
+                    .map_err(|e| format!("Pipeline execution failed: {}", e).into())
             }
         }
     }
@@ -514,17 +559,26 @@ impl JobExecutor {
         // For now, use the simple pipeline execution
         // TODO: Implement proper event-by-event tracking
         // This requires extending Stream to support tracking callbacks
-        
+
         let result = Self::execute_pipeline(stream, sink_config, job_id).await;
-        
+
         // Update tracking after pipeline completes
         // In a full implementation, we'd track during processing
         if result.is_ok() {
-            offset_tracker.update_offset(source_id, *current_offset).await?;
+            offset_tracker
+                .update_offset(source_id, *current_offset)
+                .await?;
             let transaction_id = Some(format!("tx-{}", *events_processed));
-            sink_tracker.update_write(sink_id, *events_processed, transaction_id, *events_processed).await?;
+            sink_tracker
+                .update_write(
+                    sink_id,
+                    *events_processed,
+                    transaction_id,
+                    *events_processed,
+                )
+                .await?;
         }
-        
+
         result
     }
 

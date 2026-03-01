@@ -2,6 +2,76 @@
 
 **Ultra-fast, distributed stream processing engine built in Rust**
 
+---
+
+## 🟢 Current State (2026-03-01)
+
+### Streaming SQL Query Engine — Fully Verified Working
+
+All windowed aggregation paths are tested end-to-end with real HTTP sources and file sinks:
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Tumbling window | ✅ Working | `simple_counter.toml` — COUNT, MIN, MAX |
+| Sliding window | ✅ Working | `price_oracle.toml` — MEDIAN, AVG, MIN, MAX, SUM, COUNT |
+| Session window | ✅ Working | `ad_analytics.toml` — COUNT, SUM, AVG |
+| GROUP BY | ✅ Working | key embedded in result JSON |
+| WHERE clause | ✅ Working | pre-aggregation filter verified |
+| HAVING clause | ✅ Working | post-aggregation filter verified (multi-agg path) |
+| Single-agg path | ✅ Working | `StreamingWindowedAggregator` "value"→alias fallback fixed |
+| Multi-agg path | ✅ Working | `WindowedBatchSink` + `apply_windowed_aggregations` |
+| HTTP source | ✅ Working | polling, key_path extraction |
+| File sink | ✅ Working | JSON append mode |
+
+### Bugs Fixed (Sessions 6–7)
+
+1. `SelectField::Aggregation` silently skipped in `project_event` → aliases now forwarded
+2. `window_start`/`window_end` stripped in projection → now preserved
+3. GROUP BY key not embedded in result → fixed in `apply_windowed_aggregations`
+4. Single-agg result stored under `"value"` not alias → `or_else(|| json.get("value"))` fallback
+5. HAVING not applied in `apply_windowed_aggregations` → `results.retain(...)` added
+6. HAVING silently ignored when placed after WINDOW in SQL → documented ordering requirement
+7. `test-simple-counter.sh` relative path resolution → absolute path at script start
+
+### Test Infrastructure
+
+- **Test script**: `bash demo/test-simple-counter.sh [optional-job-config]`
+  - Accepts any job config; detects output file path from config
+  - Debug build only (~13s incremental)
+  - Cleans stale state with `pkill -f streamforge` + `lsof -ti:9001 | xargs kill -9`
+- **Ad analytics**: `bash demo/test-ad-analytics.sh`
+- **Price oracle**: `bash demo/test-price-oracle.sh`
+- **Unit tests**: 5 new tests in `src/query/executor.rs` `mod tests`
+  - `test_project_event_aggregation_alias_preserved` — session-6 regression
+  - `test_project_event_aggregation_single_agg_value_fallback`
+  - `test_project_event_field_and_all`
+  - `test_apply_windowed_aggregations_group_by_key_embedded`
+  - `test_apply_windowed_aggregations_having_filters` (multi-agg path)
+
+### SQL Clause Ordering Requirement
+
+The parser enforces this order (out-of-order clauses are silently ignored):
+```sql
+SELECT ...
+FROM ...
+[WHERE ...]
+[GROUP BY ...]
+[HAVING ...]     ← must come BEFORE WINDOW
+[WINDOW ...]
+[ORDER BY ...]
+[LIMIT ...]
+[OFFSET ...]
+```
+
+### What's Next
+
+1. **External connectors** — Kafka source/sink (highest production value)
+2. **Metrics sink** — route aggregation results to Prometheus/Grafana
+3. **Query optimizer** — filter pushdown, cost-based optimization
+4. **Test coverage** — integration tests, chaos testing
+
+---
+
 ## Current Status Summary
 
 ### ✅ Completed (Foundation)
@@ -175,8 +245,8 @@
 - ✅ Windowed aggregations (TUMBLING, SLIDING, SESSION)
 - ✅ **Distributed SQL query execution** - Automatic partitioning and result merging
 - ⚠️ Query optimizer (placeholder, no cost-based optimization)
-- ❌ JOIN operations (not yet implemented)
-- ❌ True streaming windowed aggregations (batch mode only)
+- ✅ JOIN operations (INNER, LEFT, RIGHT, FULL OUTER)
+- ✅ Streaming windowed aggregations — all three window types, GROUP BY, WHERE, HAVING (verified session 7)
 - ❌ Materialized views
 - ❌ Subqueries, UNION, DISTINCT, CASE expressions
 
@@ -820,15 +890,15 @@ A comprehensive demo project is available in `demo/` showcasing:
    - **Impact**: Limited integration options, may require custom connectors
    - **Priority**: 🟡 HIGH depending on use case
 
-4. **Query Engine** ✅ **MOSTLY COMPLETE**
+4. **Query Engine** ✅ **COMPLETE (core)**
    - ✅ Complete SQL parser and executor
    - ✅ Distributed SQL query execution
    - ✅ Advanced SQL features (HAVING, ORDER BY, LIMIT/OFFSET, scalar functions)
-   - ❌ JOIN operations
-   - ❌ True streaming windowed aggregations
-   - ❌ Query optimization
-   - **Impact**: SQL queries work well, but JOINs and streaming windowing missing
-   - **Priority**: 🟡 MEDIUM (core complete, advanced features remaining)
+   - ✅ JOIN operations (INNER, LEFT, RIGHT, FULL OUTER)
+   - ✅ Streaming windowed aggregations — tumbling, sliding, session; GROUP BY; WHERE; HAVING
+   - ❌ Query optimization (cost-based, filter pushdown)
+   - **Impact**: All core SQL features verified working end-to-end
+   - **Priority**: 🟢 LOW for core; query optimizer is medium priority
 
 5. **Testing & Quality** 🟢 **MEDIUM**
    - ✅ Unit tests (196 passing)

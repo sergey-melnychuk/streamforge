@@ -21,8 +21,8 @@ SELECT
     COUNT(*) AS num_sources
 FROM price_events
 GROUP BY symbol
-WINDOW TUMBLING 60 SECONDS
+WINDOW SLIDING 10 SECONDS
 """
 
-sink = { type = "metrics", prefix = "oracle", http_endpoint = "127.0.0.1:9101" }
+sink = { type = "file", path = "/tmp/streamforge_oracle_output.jsonl", format = "json", append = true }
 

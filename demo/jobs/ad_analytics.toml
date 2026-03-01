@@ -18,7 +18,8 @@ SELECT
     AVG(cost) AS avg_cost
 FROM ad_events
 GROUP BY campaign_id
-WINDOW TUMBLING 60 SECONDS
+--HAVING event_count > 5
+WINDOW SESSION 10 SECONDS
 """
 
-sink = { type = "metrics", prefix = "ad", http_endpoint = "127.0.0.1:9100" }
+sink = { type = "file", path = "/tmp/streamforge_ad_output.jsonl", format = "json", append = true }

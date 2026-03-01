@@ -31,7 +31,10 @@ pub struct OffsetTracker {
 
 impl OffsetTracker {
     /// Create a new offset tracker for a job
-    pub async fn new(job_id: &str, storage_dir: &Path) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn new(
+        job_id: &str,
+        storage_dir: &Path,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let storage_dir = storage_dir.join("offsets");
         fs::create_dir_all(&storage_dir).await?;
 
@@ -57,7 +60,11 @@ impl OffsetTracker {
     }
 
     /// Update the offset for a source
-    pub async fn update_offset(&self, source_id: &str, offset: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn update_offset(
+        &self,
+        source_id: &str,
+        offset: u64,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -98,4 +105,3 @@ impl OffsetTracker {
 }
 
 use std::sync::Arc;
-

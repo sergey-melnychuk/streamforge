@@ -29,7 +29,9 @@ impl MetricsServer {
     }
 
     /// Start the metrics server
-    pub async fn start(&self) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn start(
+        &self,
+    ) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error + Send + Sync>> {
         let collectors = Arc::clone(&self.collectors);
         let addr = self.bind_address;
 
@@ -97,7 +99,8 @@ impl MetricsServer {
         if metrics.is_empty() {
             metrics = "# HELP streamforge_node_up Node is up\n\
                       # TYPE streamforge_node_up gauge\n\
-                      streamforge_node_up 1\n".to_string();
+                      streamforge_node_up 1\n"
+                .to_string();
         }
 
         format!(

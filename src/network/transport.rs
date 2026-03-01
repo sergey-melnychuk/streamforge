@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio_util::codec::{FramedRead, FramedWrite};
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 /// Error type for transport operations
 #[derive(Debug, thiserror::Error)]
