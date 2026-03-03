@@ -72,19 +72,11 @@ cargo build --release --bin streamforge || {
     exit 1
 }
 
-cd "$DEMO_DIR"
-cargo build --release --bin simple_counter_server || {
-    echo -e "${RED}Failed to build simple_counter_server${NC}"
+cd "$DEMO_DIR/load"
+cargo build --release || {
+    echo -e "${RED}Failed to build load generators${NC}"
     exit 1
 }
-cd "$PROJECT_ROOT"
-
-# Commented out: Other demo load generators
-# cd "$DEMO_DIR/load"
-# cargo build --release || {
-#     echo -e "${RED}Failed to build load generators${NC}"
-#     exit 1
-# }
 cd "$PROJECT_ROOT"
 
 echo ""
@@ -105,7 +97,7 @@ echo "  ✓ Price Event Server (PID: $PRICE_PID)"
 
 # Start simple counter server
 cd "$DEMO_DIR"
-"$DEMO_DIR/target/release/simple_counter_server" > /tmp/counter_server.log 2>&1 &
+"$DEMO_DIR/load/target/release/simple_counter_server" > /tmp/counter_server.log 2>&1 &
 COUNTER_PID=$!
 PIDS+=($COUNTER_PID)
 echo "  ✓ Counter Server (PID: $COUNTER_PID)"
@@ -175,7 +167,31 @@ echo "  ✓ Simple Counter job submitted (PID: $COUNTER_JOB_PID)"
 
 sleep 5
 echo -e "${YELLOW}Waiting for jobs to initialize and start processing...${NC}"
-echo -e "${YELLOW}Note: Jobs process events in 60-second windows, metrics may take up to 60s to appear${NC}"
+echo -e "${YELLOW}Note: Jobs process events in 10-second windows, output should appear every ~10 seconds${NC}"
+
+# Step 6: Verify jobs are running
+echo ""
+echo -e "${BLUE}Step 6: Verifying jobs on cluster...${NC}"
+"$PROJECT_ROOT/target/release/streamforge" list --verbose --nodes "127.0.0.1:9001" 2>/dev/null || {
+    echo -e "${YELLOW}  (Could not list jobs - nodes may still be initializing)${NC}"
+}
+
+# Step 7: Wait for first window output and verify
+echo ""
+echo -e "${BLUE}Step 7: Waiting for output (up to 15s)...${NC}"
+for i in $(seq 1 15); do
+    if [ -s /tmp/streamforge_counter_output.jsonl ] || [ -s /tmp/streamforge_ad_output.jsonl ] || [ -s /tmp/streamforge_oracle_output.jsonl ]; then
+        echo -e "  ${GREEN}✓ Output detected!${NC}"
+        [ -s /tmp/streamforge_counter_output.jsonl ] && echo "    Counter:      $(tail -1 /tmp/streamforge_counter_output.jsonl | head -c 120)..."
+        [ -s /tmp/streamforge_ad_output.jsonl ] && echo "    Ad Analytics: $(tail -1 /tmp/streamforge_ad_output.jsonl | head -c 120)..."
+        [ -s /tmp/streamforge_oracle_output.jsonl ] && echo "    Price Oracle: $(tail -1 /tmp/streamforge_oracle_output.jsonl | head -c 120)..."
+        break
+    fi
+    sleep 1
+done
+if [ ! -s /tmp/streamforge_counter_output.jsonl ] && [ ! -s /tmp/streamforge_ad_output.jsonl ] && [ ! -s /tmp/streamforge_oracle_output.jsonl ]; then
+    echo -e "  ${YELLOW}No output yet - jobs may need more time to produce first window results${NC}"
+fi
 
 echo ""
 echo -e "${GREEN}========================================${NC}"
@@ -187,12 +203,10 @@ echo "  📡 Counter:      http://127.0.0.1:8093/counter"
 echo "  📡 Ad Events:    http://127.0.0.1:8091/event"
 echo "  📡 Price Events: http://127.0.0.1:8092/event"
 echo ""
-echo "Output File:"
-echo "  📄 Counter Output: /tmp/streamforge_counter_output.jsonl"
-echo ""
-echo "Metrics:"
-echo "  📊 Ad Analytics: http://127.0.0.1:9100/metrics"
-echo "  📊 Price Oracle: http://127.0.0.1:9101/metrics"
+echo "Output Files:"
+echo "  📄 Counter:      /tmp/streamforge_counter_output.jsonl"
+echo "  📄 Ad Analytics: /tmp/streamforge_ad_output.jsonl"
+echo "  📄 Price Oracle: /tmp/streamforge_oracle_output.jsonl"
 echo ""
 echo "Cluster Nodes:"
 echo "  🖥️  Node 1: 127.0.0.1:9001 (metrics: 127.0.0.1:9081)"
